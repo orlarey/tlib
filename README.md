@@ -93,3 +93,8 @@ Detached from `compiler/tlib` in the Faust compiler (Y. Orlarey, GRAME,
 in-compiler version, the only changes are the removal of the compiler-global
 couplings (symbols and tuning flags now owned by the library, pluggable error
 handling) — the data structures and algorithms are identical.
+
+## License
+
+GNU Lesser General Public License version 2.1 or later — see
+[LICENSE](LICENSE).
