@@ -184,16 +184,26 @@ void CTree::growHashTableIfNeeded()
 
 // Constructor : add the tree to the hash table
 CTree::CTree(size_t hk, const Node& n, const tvec& br)
+    : CTree(hk, n, int(br.size()), br.empty() ? nullptr : br.data())
+{
+}
+
+// Constructor : add the tree to the hash table
+CTree::CTree(size_t hk, const Node& n, int ar, const Tree br[])
     : fNode(n),
       fType(0),
       fFastProperty(nullptr),
       fProperties(nullptr),
       fHashKey(hk),
       fSerial(++gSerialCounter),
-      fAperture(calcTreeAperture(n, br)),
+      fAperture(calcTreeAperture(n, ar, br)),
       fVisitTime(0),
-      fBranch(br)
+      fBranch()
 {
+    if (ar > 0) {
+        fBranch.assign(br, br + ar);
+    }
+
     // link in the hash table (CTree::make already called growHashTableIfNeeded)
     size_t j      = hk % gHashTableSize;
     fNext         = gHashTable[j];
@@ -218,31 +228,44 @@ bool CTree::equiv(const Node& n, const tvec& br) const
     return (fNode == n) && (fBranch == br);
 }
 
+bool CTree::equiv(const Node& n, int ar, const Tree br[]) const
+{
+    if (fNode != n || fBranch.size() != size_t(ar)) {
+        return false;
+    }
+    for (int i = 0; i < ar; ++i) {
+        if (fBranch[i] != br[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 size_t CTree::calcTreeHash(const Node& n, const tvec& br)
 {
+    return calcTreeHash(n, int(br.size()), br.empty() ? nullptr : br.data());
+}
+
+size_t CTree::calcTreeHash(const Node& n, int ar, const Tree br[])
+{
     size_t hk = std::hash<void*>()(n.getPointer());
-    for (const auto& ptr : br) {
+    for (int i = 0; i < ar; ++i) {
         // Taken from by boost::hash_combine
-        hk = hk ^ (ptr->fHashKey + 0x9e3779b9 + (hk << 6) + (hk >> 2));
+        Tree ptr = br[i];
+        hk       = hk ^ (ptr->fHashKey + 0x9e3779b9 + (hk << 6) + (hk >> 2));
     }
     return hk;
 }
 
-Tree CTree::make(const Node& n, int ar, Tree tbl[])
-{
-    vector<Tree> br(tbl, tbl + ar);
-    return CTree::make(n, br);
-}
-
-Tree CTree::make(const Node& n, const tvec& br)
+Tree CTree::make(const Node& n, int ar, const Tree tbl[])
 {
     ensureHashTableAllocated();
 
-    size_t hk       = calcTreeHash(n, br);
+    size_t hk       = calcTreeHash(n, ar, tbl);
     Tree   t        = gHashTable[hk % gHashTableSize];
     bool   collided = (t != nullptr);  // bucket already occupied, known for free from the lookup
 
-    while (t && !t->equiv(n, br)) {
+    while (t && !t->equiv(n, ar, tbl)) {
         t = t->fNext;
     }
 
@@ -256,8 +279,13 @@ Tree CTree::make(const Node& n, const tvec& br)
         if (collided) {
             growHashTableIfNeeded();
         }
-        return new CTree(hk, n, br);
+        return new CTree(hk, n, ar, tbl);
     }
+}
+
+Tree CTree::make(const Node& n, const tvec& br)
+{
+    return CTree::make(n, int(br.size()), br.empty() ? nullptr : br.data());
 }
 
 ostream& CTree::print(ostream& fout) const

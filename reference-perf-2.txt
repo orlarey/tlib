@@ -1,0 +1,30 @@
+tlib performance scenarios (scale=1, runs=15, time=median)
+case                                    work   median-ms      Mops/s  note
+----------------------------------------------------------------------------------
+
+[construction]
+build-low-sharing                     524287     104.754       5.005  unique=524287
+build-high-sharing                   2097151      70.424      29.779  unique=528
+rebuild-high-sharing                 2097151      70.057      29.935  cache-hit shared
+
+[traversal]
+walk-logical-occurrences             4194303      11.980     350.118  visited=4194303
+walk-unique-shared-nodes                 466       0.004     115.318  visited=466
+
+[occurrences]
+Occur-all-visits                     2097151     278.619       7.527  leaf-count=1048576
+sharing-first-visit-annotate          524287      35.531      14.756  root-count=1
+
+[properties]
+property-set-many-hosts               500000      23.398      21.370
+property-get-many-hosts               500000       7.691      65.015  hits=500000
+property-set-one-host                  60000       6.338       9.466
+property-get-one-host                  60000       3.739      16.046  hits=60000
+property2-set-one-box                  80000      11.188       7.151
+property2-get-one-box                  80000       7.524      10.632  hits=80000
+
+[recursive-trees]
+build-debruijn-rec                      1200       0.206       5.822  closed=yes
+debruijn-to-symbolic                    1200       0.546       2.198
+debruijn-to-symbolic-hit                1200       0.000   28571.429  cache-hit
+lift-open-rec-body                      1200       0.372       3.225

@@ -84,21 +84,30 @@ cmake --build build
 `tlib-benchmark` runs a small performance suite inspired by Faust compiler
 workloads: low/high-sharing tree construction, logical and unique-node
 traversals, occurrence annotations, tree properties, `property2<Tree>`
-memoization, and recursive tree conversion. Pass an integer scale factor to
-increase the workload:
+memoization, and recursive tree conversion. By default each scenario is
+measured once at `scale=1`. Pass a scale factor to increase the workload and a
+run count to report the median of several measurements:
 
 ```bash
 ./build/tlib-benchmark 3
+./build/tlib-benchmark 3 7
+./build/tlib-benchmark --scale 3 --runs 7
 ```
 
 The output columns are:
 
 - `work`: number of logical operations for the scenario (usually logical tree
   nodes visited or property operations attempted).
-- `ms`: wall-clock time for the measured block.
-- `Mops/s`: `work / ms / 1000`, useful for comparing runs on the same machine.
+- `median-ms`: median wall-clock time for the measured block. With
+  `--runs 1`, this is the single measured time.
+- `Mops/s`: `work / median-ms / 1000`, useful for comparing runs on the same
+  machine.
 - `note`: scenario-specific sanity data, such as number of distinct shared
   nodes, cache hits, or occurrence counts.
+
+Each measured run rebuilds its own setup and calls `tlib::cleanup()` around the
+scenario, so repeated measurements do not reuse trees, symbols, properties, or
+hash-table state from the previous run.
 
 Benchmark groups:
 

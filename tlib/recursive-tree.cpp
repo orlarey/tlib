@@ -172,6 +172,11 @@ bool isRef(Tree t, Tree& v)
 
 int CTree::calcTreeAperture(const Node& n, const tvec& br)
 {
+    return calcTreeAperture(n, int(br.size()), br.empty() ? nullptr : br.data());
+}
+
+int CTree::calcTreeAperture(const Node& n, int ar, const Tree br[])
+{
     int x;
     ensureRecSymbols();
     if (n == gDebruijnRefSym) {
@@ -188,14 +193,11 @@ int CTree::calcTreeAperture(const Node& n, const tvec& br)
 
     } else {
         // return max aperture of branches
-        int                  rc = 0;
-        tvec::const_iterator b  = br.begin();
-        tvec::const_iterator z  = br.end();
-        while (b != z) {
-            if ((*b)->aperture() > rc) {
-                rc = (*b)->aperture();
+        int rc = 0;
+        for (int i = 0; i < ar; ++i) {
+            if (br[i]->aperture() > rc) {
+                rc = br[i]->aperture();
             }
-            ++b;
         }
         return rc;
     }
