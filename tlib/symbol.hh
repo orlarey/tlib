@@ -38,6 +38,7 @@
 #ifndef __SYMBOL__
 #define __SYMBOL__
 
+#include <cstddef>
 #include <map>
 #include <string>
 
@@ -54,11 +55,11 @@ typedef Symbol* Sym;
  */
 class Symbol : public virtual Garbageable {
    private:
-    static const size_t kInitialHashTableSize = 511;  ///< initial size of the hash table (prime)
-    static size_t        gHashTableSize;   ///< current size of the hash table (grows as needed)
-    static size_t        gHashTableCount;  ///< number of symbols currently stored in the table
+    static const std::size_t kInitialHashTableSize = 511;  ///< initial size of the hash table (prime)
+    static std::size_t        gHashTableSize;   ///< current size of the hash table (grows as needed)
+    static std::size_t        gHashTableCount;  ///< number of symbols currently stored in the table
     static Symbol**       gSymbolTable;     ///< hash table used to store the symbols (grows by rehashing)
-    static std::map<std::string, size_t> gPrefixCounters;
+    static std::map<std::string, std::size_t> gPrefixCounters;
 
     static double gHashLoadFactor;  ///< load factor triggering table growth (see setHashLoadFactor)
 
@@ -70,19 +71,19 @@ class Symbol : public virtual Garbageable {
 
     // Fields
     std::string fName;  ///< Name of the symbol
-    size_t fHash;  ///< Hash key computed from the name and used to determine the hash table entry
-    Sym    fNext;  ///< Next symbol in the hash table entry
-    void*  fData;  ///< Field to user disposal to store additional data
+    std::size_t fHash;  ///< Hash key computed from the name and used to determine the hash table entry
+    Sym         fNext;  ///< Next symbol in the hash table entry
+    void*       fData;  ///< Field to user disposal to store additional data
 
     // Constructors & destructors
-    Symbol(const std::string&, size_t hsh,
+    Symbol(const std::string&, std::size_t hsh,
            Sym nxt);  ///< Constructs a new symbol ready to be placed in the hash table
     ~Symbol();        ///< The destructor is never used
 
     // Others
-    bool equiv(size_t hash, const std::string& str)
+    bool equiv(std::size_t hash, const std::string& str)
         const;  ///< Check if the name of the symbol is equal to string \p str
-    static size_t calcHashKey(
+    static std::size_t calcHashKey(
         const std::string& str);  ///< Compute the 32-bits hash key of string \p str
 
     // Static methods

@@ -69,6 +69,7 @@
 #ifndef __TREE__
 #define __TREE__
 
+#include <cstddef>
 #include <map>
 #include <vector>
 
@@ -134,12 +135,12 @@ struct less<CTree*> {
 
 class TLIB_API CTree : public virtual Garbageable {
    protected:
-    static const size_t kInitialHashTableSize = 1009;  ///< initial size of the hash table (prime);
-                                                        ///< grows as needed, see growHashTableIfNeeded
-    static size_t        gSerialCounter;   ///< the serial number counter
+    static const std::size_t kInitialHashTableSize = 1009;  ///< initial size of the hash table (prime);
+                                                             ///< grows as needed, see growHashTableIfNeeded
+    static std::size_t   gSerialCounter;   ///< the serial number counter
     static double        gHashLoadFactor; ///< load factor triggering table growth
-    static size_t        gHashTableSize;   ///< current size of the hash table (grows as needed)
-    static size_t        gHashTableCount;  ///< number of trees currently stored in the table
+    static std::size_t   gHashTableSize;   ///< current size of the hash table (grows as needed)
+    static std::size_t   gHashTableCount;  ///< number of trees currently stored in the table
     static Tree*         gHashTable;       ///< hash table used for "hash consing" (grows by rehashing)
 
     ///< cheap check, called on every make() : lazily allocates the table on first use (needed
@@ -172,8 +173,8 @@ class TLIB_API CTree : public virtual Garbageable {
     Tree         fFastProperty; ///< generic single-slot fast path for one caller-chosen "hot"
                                  ///< property, bypassing fProperties entirely (see setFastProperty)
     plist*       fProperties;   ///< lazily allocated; nullptr means no property set
-    size_t       fHashKey;      ///< the hashtable key
-    size_t       fSerial;       ///< the increasing serial number
+    std::size_t  fHashKey;      ///< the hashtable key
+    std::size_t  fSerial;       ///< the increasing serial number
     int          fAperture;     ///< how "open" is a tree (synthesized field)
     unsigned int fVisitTime;    ///< keep track of visits
     tvec         fBranch;       ///< the subtrees
@@ -190,12 +191,12 @@ class TLIB_API CTree : public virtual Garbageable {
     {
     }
     ///< construction is private, uses tree::make instead
-    CTree(size_t hk, const Node& n, const tvec& br);
+    CTree(std::size_t hk, const Node& n, const tvec& br);
 
     ///< used to check if an equivalent tree already exists
     bool equiv(const Node& n, const tvec& br) const;
 
-    static size_t calcTreeHash(
+    static std::size_t calcTreeHash(
         const Node& n,
         const tvec& br);  ///< compute the hash key of a tree according to its node and branches
     static int calcTreeAperture(const Node& n, const tvec& br);  ///< compute how open is a tree
@@ -216,8 +217,8 @@ class TLIB_API CTree : public virtual Garbageable {
     }  ///< return the number of branches (subtrees) of a tree
     Tree branch(int i) const { return fBranch[i]; }   ///< return the ith branch (subtree) of a tree
     const tvec& branches() const { return fBranch; }  ///< return all branches (subtrees) of a tree
-    size_t      hashkey() const { return fHashKey; }  ///< return the hashkey of the tree
-    size_t      serial() const { return fSerial; }    ///< return the serial of the tree
+    std::size_t hashkey() const { return fHashKey; }  ///< return the hashkey of the tree
+    std::size_t serial() const { return fSerial; }    ///< return the serial of the tree
     int         aperture() const
     {
         return fAperture;
