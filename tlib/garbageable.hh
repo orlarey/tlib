@@ -31,6 +31,7 @@
 #ifndef __TLIB_GARBAGEABLE__
 #define __TLIB_GARBAGEABLE__
 
+#include <cstddef>
 #include <new>
 
 #include "export.hh"
@@ -42,8 +43,8 @@ class TLIB_API Garbageable {
     Garbageable() {}
     virtual ~Garbageable() {}
 
-    static void* operator new(size_t size);
-    static void* operator new[](size_t size);
+    static void* operator new(std::size_t size);
+    static void* operator new[](std::size_t size);
     static void  operator delete(void* ptr);
     static void  operator delete[](void* ptr);
 

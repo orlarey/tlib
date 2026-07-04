@@ -64,7 +64,7 @@ void Garbageable::cleanup()
     gHeapCleanup = false;
 }
 
-void* Garbageable::operator new(size_t size)
+void* Garbageable::operator new(std::size_t size)
 {
     Garbageable* res = static_cast<Garbageable*>(::operator new(size));
     rawObjectTable().push_front(res);
@@ -81,7 +81,7 @@ void Garbageable::operator delete(void* ptr)
     ::operator delete(ptr);
 }
 
-void* Garbageable::operator new[](size_t size)
+void* Garbageable::operator new[](std::size_t size)
 {
     Garbageable* res = static_cast<Garbageable*>(::operator new[](size));
     arrayObjectTable().push_front(res);
