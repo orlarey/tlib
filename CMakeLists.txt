@@ -5,6 +5,8 @@ project(tlib LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+enable_testing()
+
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wno-unused-parameter")
 
 if (TIDY)
@@ -36,6 +38,7 @@ target_include_directories(tlib PUBLIC tlib)
 # the test executable
 add_executable(tlib-tests main.cpp tests.cpp tests.hh)
 target_link_libraries(tlib-tests PRIVATE tlib)
+add_test(NAME tlib-tests COMMAND tlib-tests)
 
 # the benchmark executable
 add_executable(tlib-benchmark benchmark.cpp)

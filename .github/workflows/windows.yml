@@ -12,8 +12,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: cmake create project
-      run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     - name: build cmake project
-      run: cmake --build build --config Release
+      run: cmake --build build --config Release --target all
     - name: execute test
-      run: ./build/Release/tlib-tests.exe
+      run: ctest --test-dir build --build-config Release --output-on-failure
