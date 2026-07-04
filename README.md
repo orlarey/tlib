@@ -81,6 +81,65 @@ cmake --build build
 ./build/tlib-benchmark
 ```
 
+`tlib-benchmark` runs a small performance suite inspired by Faust compiler
+workloads: low/high-sharing tree construction, logical and unique-node
+traversals, occurrence annotations, tree properties, `property2<Tree>`
+memoization, and recursive tree conversion. Pass an integer scale factor to
+increase the workload:
+
+```bash
+./build/tlib-benchmark 3
+```
+
+The output columns are:
+
+- `work`: number of logical operations for the scenario (usually logical tree
+  nodes visited or property operations attempted).
+- `ms`: wall-clock time for the measured block.
+- `Mops/s`: `work / ms / 1000`, useful for comparing runs on the same machine.
+- `note`: scenario-specific sanity data, such as number of distinct shared
+  nodes, cache hits, or occurrence counts.
+
+Benchmark groups:
+
+- `build-low-sharing`: builds a full binary expression tree whose leaves are
+  mostly distinct. This stresses raw tree creation, hash-table growth, and the
+  low-cache-hit path.
+- `build-high-sharing`: builds a much larger logical binary tree from a small
+  state space, so many subtrees collapse to the same `Tree`. This measures
+  hash-consing under heavy sharing.
+- `rebuild-high-sharing`: rebuilds the same high-sharing tree immediately. The
+  result should be pointer-identical to the previous one; this measures the
+  cache-hit lookup path.
+- `walk-logical-occurrences`: recursively walks every logical occurrence in a
+  shared tree, revisiting shared subtrees every time they appear.
+- `walk-unique-shared-nodes`: walks the same tree but uses `CTree::gVisitTime`
+  to visit each shared node once. This approximates compiler passes that avoid
+  repeated work on DAGs.
+- `Occur-all-visits`: uses `Occur` to count subtree occurrences in a tree with
+  extreme sharing. This measures recursive occurrence annotation when every
+  logical occurrence is counted.
+- `sharing-first-visit-annotate`: annotates a large mostly-unshared tree with a
+  fresh property key, visiting each node once. This is close to Faust sharing
+  analysis (`shlysis`) first-visit behavior.
+- `property-set-many-hosts` / `property-get-many-hosts`: sets and reads one
+  property key across many different trees, representative of compiler passes
+  that attach one analysis result per node.
+- `property-set-one-host` / `property-get-one-host`: sets and reads many
+  distinct property keys on the same tree, representative of worst-case
+  property-map growth on a hot node.
+- `property2-set-one-box` / `property2-get-one-box`: memoizes one tree under
+  many environment trees using `property2<Tree>`, matching the Faust
+  `eval(box, env)` and pattern-matcher use case.
+- `build-debruijn-rec`: builds a deep de Bruijn recursive tree and checks that
+  the enclosing `rec` closes it.
+- `debruijn-to-symbolic`: converts that recursive tree to symbolic form,
+  exercising substitution, recursive-tree properties, and hash-consing.
+- `debruijn-to-symbolic-hit`: converts the same tree again and should hit the
+  memoized result.
+- `lift-open-rec-body`: applies `lift` to the open recursive body, measuring
+  recursive-tree traversal and memoization for free de Bruijn references.
+
 The library builds as a static library `libtlib.a`; add `tlib/` to your
 include path and link against it. Requires C++17, no external dependencies.
 
