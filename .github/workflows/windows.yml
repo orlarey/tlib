@@ -14,6 +14,6 @@ jobs:
     - name: cmake create project
       run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
     - name: build cmake project
-      run: cmake --build build --config Release --target all
+      run: cmake --build build --config Release
     - name: execute test
       run: ctest --test-dir build --build-config Release --output-on-failure
