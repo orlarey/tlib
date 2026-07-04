@@ -1,8 +1,7 @@
 # tlib — a tree library with hash-consing
 
 Standalone version of the tree library used at the heart of the
-[Faust](https://faust.grame.fr) compiler since 2002, in the spirit of the
-ATerm library.
+[Faust](https://faust.grame.fr).
 
 `tlib` provides immutable trees with **maximal sharing** (hash-consing): two
 trees with the same content are always the *same* pointer, so structural
