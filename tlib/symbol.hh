@@ -53,7 +53,7 @@ typedef Symbol* Sym;
 /**
  * Symbols are unique objects with a name stored in a hash table.
  */
-class Symbol : public virtual Garbageable {
+class Symbol : public Garbageable {
    private:
     static const std::size_t kInitialHashTableSize = 511;  ///< initial size of the hash table (prime)
     static std::size_t        gHashTableSize;   ///< current size of the hash table (grows as needed)

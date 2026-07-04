@@ -54,7 +54,7 @@ class TLIB_API Garbageable {
 };
 
 template <class P>
-class GarbageablePtr : public virtual Garbageable {
+class GarbageablePtr : public Garbageable {
    private:
     P* fPtr;
 

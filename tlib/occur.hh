@@ -30,7 +30,7 @@
  * Count the number of occurrences of each subtree of a root tree.
  */
 
-class Occur : public virtual Garbageable {
+class Occur : public Garbageable {
     Tree fKey;  // specific property key
 
    public:

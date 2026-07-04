@@ -70,7 +70,7 @@ enum NodeType { kIntNode, kInt64Node, kDoubleNode, kSymNode, kPointerNode };
  * Class Node = (type x (int + double + Sym + void*))
  */
 
-class Node : public virtual Garbageable {
+class Node : public Garbageable {
     int fType;
     union {
         int     i;

@@ -133,7 +133,7 @@ struct less<CTree*> {
  *
  **/
 
-class TLIB_API CTree : public virtual Garbageable {
+class TLIB_API CTree : public Garbageable {
    protected:
     static const std::size_t kInitialHashTableSize = 1009;  ///< initial size of the hash table (prime);
                                                              ///< grows as needed, see growHashTableIfNeeded
