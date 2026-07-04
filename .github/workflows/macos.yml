@@ -1,0 +1,21 @@
+name: macOS
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: create cmake project
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+    - name: build cmake project
+      run: cmake --build build/ --target all
+    - name: execute test
+      run: ./build/tlib-tests

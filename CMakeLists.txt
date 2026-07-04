@@ -1,0 +1,42 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(tlib LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra -Wno-unused-parameter")
+
+if (TIDY)
+    set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=-*,clang-*,performance-*,llvm-*,modernize-*,-modernize-use-trailing-return-type,cert-*")
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
+if (MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(-Wall -Wextra)
+endif()
+
+# the library
+add_library(tlib STATIC
+    tlib/tlib.cpp
+    tlib/tlib-error.cpp
+    tlib/garbageable.cpp
+    tlib/symbol.cpp
+    tlib/node.cpp
+    tlib/tree.cpp
+    tlib/list.cpp
+    tlib/recursive-tree.cpp
+    tlib/dcond.cpp
+    tlib/occur.cpp)
+
+target_include_directories(tlib PUBLIC tlib)
+
+# the test executable
+add_executable(tlib-tests main.cpp tests.cpp tests.hh)
+target_link_libraries(tlib-tests PRIVATE tlib)
+
+# the benchmark executable
+add_executable(tlib-benchmark benchmark.cpp)
+target_link_libraries(tlib-benchmark PRIVATE tlib)
