@@ -26,8 +26,22 @@
 // The allocation registries. In the Faust compiler these lived in the
 // 'global' singleton; the library owns them directly so it has no
 // dependency on any host application state.
-static std::list<Garbageable*> gRawObjectTable;
-static std::list<Garbageable*> gArrayObjectTable;
+//
+// Construct-on-first-use : a Garbageable can be allocated from another
+// translation unit's static initializer, whose order relative to this file's
+// statics is unspecified by C++. Function-local statics are initialized on
+// first call, which makes the registries safe whatever the order.
+static std::list<Garbageable*>& rawObjectTable()
+{
+    static std::list<Garbageable*> table;
+    return table;
+}
+
+static std::list<Garbageable*>& arrayObjectTable()
+{
+    static std::list<Garbageable*> table;
+    return table;
+}
 
 // True while cleanup() is running: individual deletes then skip the
 // (pointless and slow) removal from the registry.
@@ -37,15 +51,15 @@ void Garbageable::cleanup()
 {
     gHeapCleanup = true;
 
-    for (Garbageable* obj : gRawObjectTable) {
+    for (Garbageable* obj : rawObjectTable()) {
         delete obj;
     }
-    gRawObjectTable.clear();
+    rawObjectTable().clear();
 
-    for (Garbageable* obj : gArrayObjectTable) {
+    for (Garbageable* obj : arrayObjectTable()) {
         delete[] obj;
     }
-    gArrayObjectTable.clear();
+    arrayObjectTable().clear();
 
     gHeapCleanup = false;
 }
@@ -53,7 +67,7 @@ void Garbageable::cleanup()
 void* Garbageable::operator new(size_t size)
 {
     Garbageable* res = static_cast<Garbageable*>(::operator new(size));
-    gRawObjectTable.push_front(res);
+    rawObjectTable().push_front(res);
     return res;
 }
 
@@ -62,7 +76,7 @@ void Garbageable::operator delete(void* ptr)
     // An object may be deleted individually during a session: it then has to
     // be removed from the registry so cleanup() doesn't free it twice.
     if (!gHeapCleanup) {
-        gRawObjectTable.remove(static_cast<Garbageable*>(ptr));
+        rawObjectTable().remove(static_cast<Garbageable*>(ptr));
     }
     ::operator delete(ptr);
 }
@@ -70,14 +84,14 @@ void Garbageable::operator delete(void* ptr)
 void* Garbageable::operator new[](size_t size)
 {
     Garbageable* res = static_cast<Garbageable*>(::operator new[](size));
-    gArrayObjectTable.push_front(res);
+    arrayObjectTable().push_front(res);
     return res;
 }
 
 void Garbageable::operator delete[](void* ptr)
 {
     if (!gHeapCleanup) {
-        gArrayObjectTable.remove(static_cast<Garbageable*>(ptr));
+        arrayObjectTable().remove(static_cast<Garbageable*>(ptr));
     }
     ::operator delete[](ptr);
 }

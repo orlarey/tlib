@@ -22,9 +22,15 @@
 #ifndef __TLIB_EXPORT__
 #define __TLIB_EXPORT__
 
-// Symbol visibility macro. Empty for a static library (the default build);
-// can be redefined by the host build system when tlib is built as a shared
-// library (dllexport/dllimport on Windows, visibility("default") elsewhere).
+// Symbol visibility macro. Empty for a static library (the default build).
+// A host application that embeds tlib in a shared library can redefine it
+// from its build system, e.g. :
+//     -DTLIB_EXPORT_HEADER='<faust/export.h>' -DTLIB_API=LIBFAUST_API
+// TLIB_EXPORT_HEADER is included first so the macro TLIB_API expands to can
+// be defined (dllexport/dllimport on Windows, visibility("default") elsewhere).
+#ifdef TLIB_EXPORT_HEADER
+#include TLIB_EXPORT_HEADER
+#endif
 #ifndef TLIB_API
 #define TLIB_API
 #endif
