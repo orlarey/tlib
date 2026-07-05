@@ -29,6 +29,7 @@
 #include <iostream>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "occur.hh"
@@ -49,6 +50,17 @@ static double ms(Clock::time_point t0, Clock::time_point t1)
 
 static std::size_t fullBinaryNodes(int depth)
 { return (std::size_t(1) << (depth + 1)) - 1; }
+
+static std::size_t fullTernaryNodes(int depth)
+{
+    std::size_t nodes = 0;
+    std::size_t level = 1;
+    for (int i = 0; i <= depth; ++i) {
+        nodes += level;
+        level *= 3;
+    }
+    return nodes;
+}
 
 static int scaled(int base, int scale)
 { return base * scale; }
@@ -144,6 +156,25 @@ static Tree makeRecursiveBody(int depth)
     return body;
 }
 
+static Tree makeSymbolicRecBody(int depth, Tree var, int seed, int states)
+{
+    seed %= states;
+    if (depth == 0) {
+        return (seed % 4 == 0) ? ref(var) : tree((seed % 257) - 128);
+    }
+    Tree a = makeSymbolicRecBody(depth - 1, var, seed * 3 + 1, states);
+    Tree b = makeSymbolicRecBody(depth - 1, var, seed * 5 + 7, states);
+    Tree c = ((seed + depth) % 3 == 0) ? ref(var) : tree((seed + depth) & 255);
+    return tree(symbol("symrecop"), a, b, c);
+}
+
+static Tree makeSymbolicRecursiveTree(int depth, int seed, int states, Tree& var, Tree& body)
+{
+    var  = tree(unique("R"));
+    body = makeSymbolicRecBody(depth, var, seed, states);
+    return rec(var, body);
+}
+
 static std::size_t countLogical(Tree t)
 {
     std::size_t n = 1;
@@ -194,6 +225,75 @@ static void annotateSharing(Tree key, Tree t)
         }
     }
     t->setProperty(key, tree(count + 1));
+}
+
+static bool isSymbolicRecDef(Tree t, Tree& var, Tree& body)
+{
+    return isRec(t, var, body);
+}
+
+static Tree negateNodeNumbers(const Node& n)
+{
+    switch (n.type()) {
+        case kIntNode:
+            return tree(-n.getInt());
+        case kInt64Node:
+            return tree(Node(-n.getInt64()));
+        case kDoubleNode:
+            return tree(-n.getDouble());
+        default:
+            return nullptr;
+    }
+}
+
+static Tree rebuildWithBranches(const Node& n, const tvec& br)
+{
+    return br.empty() ? tree(n) : tree(n, br);
+}
+
+static Tree negateNumbersSymbolicRec(Tree t, std::unordered_map<Tree, Tree>& memo)
+{
+    auto it = memo.find(t);
+    if (it != memo.end()) {
+        return it->second;
+    }
+
+    Tree var;
+    Tree body;
+    if (isRec(t, var, body)) {
+        // In symbolic recursive trees, rec(var, body) and ref(var) have the same
+        // structural Tree. Store a temporary self mapping before descending so
+        // recursive references stop here and do not re-enter the body. This
+        // rewrite only negates numbers, so the symbolic variable itself stays
+        // unchanged; rebuilding with rec(var, newBody) is only used to replace
+        // the RECDEF property attached to this shared SYMREC(var) node.
+        TLIB_ASSERT(body != nullptr);
+        memo[t]      = t;
+        Tree newBody = negateNumbersSymbolicRec(body, memo);
+        if (newBody != body) {
+            (void)rec(var, newBody);
+        }
+        return t;
+    }
+
+    Tree numeric = negateNodeNumbers(t->node());
+    int  ar      = t->arity();
+    if (ar == 0) {
+        Tree result = numeric ? numeric : t;
+        memo[t]     = result;
+        return result;
+    }
+
+    bool changed = (numeric != nullptr);
+    tvec br(ar);
+    for (int i = 0; i < ar; ++i) {
+        br[i] = negateNumbersSymbolicRec(t->branch(i), memo);
+        changed = changed || (br[i] != t->branch(i));
+    }
+
+    Tree result = changed ? rebuildWithBranches(numeric ? numeric->node() : t->node(), br) : t;
+    memo[t]     = result;
+    return result;
 }
 
 static void benchConstruction(int scale, int runs)
@@ -434,10 +534,90 @@ static void benchProperties(int scale, int runs)
     });
 }
 
+static void benchRewrites(int scale, int runs)
+{
+    std::cout << "\n[rewrites]\n";
+    const int sharedDepth = 20 + (scale > 2 ? 1 : 0);
+    const int recDepth    = 10 + (scale > 2 ? 1 : 0);
+    const std::size_t recWork = fullTernaryNodes(recDepth);
+
+    reportMedian("rewrite-negate-shared", fullBinaryNodes(sharedDepth), runs, [=]() {
+        tlib::cleanup();
+        Tree root = makeHighSharingTree(sharedDepth, 1, 128);
+        std::unordered_map<Tree, Tree> memo;
+        auto t0 = Clock::now();
+        Tree rewritten = negateNumbersSymbolicRec(root, memo);
+        auto t1 = Clock::now();
+        gPtrSink = reinterpret_cast<std::uintptr_t>(rewritten);
+        std::string note = "changed=" + std::string((rewritten != root) ? "yes" : "no");
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("rewrite-negate-shared-rt", fullBinaryNodes(sharedDepth) * 2, runs, [=]() {
+        tlib::cleanup();
+        Tree root = makeHighSharingTree(sharedDepth, 1, 128);
+        std::unordered_map<Tree, Tree> memo1;
+        std::unordered_map<Tree, Tree> memo2;
+        auto t0 = Clock::now();
+        Tree rewritten = negateNumbersSymbolicRec(root, memo1);
+        Tree restored  = negateNumbersSymbolicRec(rewritten, memo2);
+        auto t1 = Clock::now();
+        gPtrSink = reinterpret_cast<std::uintptr_t>(restored);
+        std::string note = "roundtrip=" + std::string((restored == root) ? "yes" : "NO");
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("rewrite-negate-symbolic-rec", recWork, runs, [=]() {
+        tlib::cleanup();
+        Tree var;
+        Tree body;
+        Tree root = makeSymbolicRecursiveTree(recDepth, 1, 96, var, body);
+        std::unordered_map<Tree, Tree> memo;
+        auto t0 = Clock::now();
+        Tree rewritten = negateNumbersSymbolicRec(root, memo);
+        auto t1 = Clock::now();
+        Tree newVar;
+        Tree newBody;
+        bool changed = isSymbolicRecDef(rewritten, newVar, newBody) && newBody != body;
+        gPtrSink = reinterpret_cast<std::uintptr_t>(rewritten);
+        std::string note = "body-changed=" + std::string(changed ? "yes" : "no");
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("rewrite-negate-symbolic-rt", recWork * 2, runs, [=]() {
+        tlib::cleanup();
+        Tree var;
+        Tree body;
+        Tree root = makeSymbolicRecursiveTree(recDepth, 1, 96, var, body);
+        std::unordered_map<Tree, Tree> memo1;
+        std::unordered_map<Tree, Tree> memo2;
+        auto t0 = Clock::now();
+        Tree rewritten = negateNumbersSymbolicRec(root, memo1);
+        Tree restored  = negateNumbersSymbolicRec(rewritten, memo2);
+        auto t1 = Clock::now();
+        Tree restoredVar;
+        Tree restoredBody;
+        bool bodyRestored = isSymbolicRecDef(restored, restoredVar, restoredBody) && restoredBody == body;
+        gPtrSink = reinterpret_cast<std::uintptr_t>(restored);
+        // Like a Simplify(x:=body) -> x:=Simplify(body) rewrite, negateNumbersSymbolicRec
+        // reuses `var` and mutates the shared rec node's body property in place, so
+        // `restored` is always the same pointer as `root` regardless of correctness.
+        // The only meaningful signal here is whether the body content round-tripped.
+        std::string note = "roundtrip=" + std::string(bodyRestored ? "yes" : "NO");
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+}
+
 static void benchRecursiveTrees(int scale, int runs)
 {
     std::cout << "\n[recursive-trees]\n";
     const int depth = scaled(1200, scale);
+    const int alphaDepth = 10 + (scale > 2 ? 1 : 0);
+    const std::size_t alphaWork = fullTernaryNodes(alphaDepth);
 
     reportMedian("build-debruijn-rec", depth, runs, [=]() {
         tlib::cleanup();
@@ -460,10 +640,10 @@ static void benchRecursiveTrees(int scale, int runs)
         auto t1   = Clock::now();
         gPtrSink  = reinterpret_cast<std::uintptr_t>(sym);
         tlib::cleanup();
-        return BenchResult{ms(t0, t1), ""};
+        return BenchResult{ms(t0, t1), "memo-local"};
     });
 
-    reportMedian("debruijn-to-symbolic-hit", depth, runs, [=]() {
+    reportMedian("debruijn-to-symbolic-repeat", depth, runs, [=]() {
         tlib::cleanup();
         Tree body        = makeRecursiveBody(depth);
         Tree r           = rec(body);
@@ -472,7 +652,79 @@ static void benchRecursiveTrees(int scale, int runs)
         Tree sym2        = deBruijn2Sym(r);
         auto t1          = Clock::now();
         gPtrSink         = reinterpret_cast<std::uintptr_t>(sym2);
+        std::string note = (sym != sym2 && areEquiv(sym, sym2)) ? "fresh-call" : "BAD";
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("debruijn-to-symbolic-cached", depth, runs, [=]() {
+        tlib::cleanup();
+        Tree body = makeRecursiveBody(depth);
+        Tree r    = rec(body);
+        auto t0   = Clock::now();
+        Tree sym  = deBruijn2SymCached(r);
+        auto t1   = Clock::now();
+        gPtrSink  = reinterpret_cast<std::uintptr_t>(sym);
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), "property-cache"};
+    });
+
+    reportMedian("debruijn-to-symbolic-cached-hit", depth, runs, [=]() {
+        tlib::cleanup();
+        Tree body        = makeRecursiveBody(depth);
+        Tree r           = rec(body);
+        Tree sym         = deBruijn2SymCached(r);
+        auto t0          = Clock::now();
+        Tree sym2        = deBruijn2SymCached(r);
+        auto t1          = Clock::now();
+        gPtrSink         = reinterpret_cast<std::uintptr_t>(sym2);
         std::string note = (sym == sym2) ? "cache-hit" : "NOT-SHARED";
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("symbolic-to-debruijn", depth, runs, [=]() {
+        tlib::cleanup();
+        Tree body = makeRecursiveBody(depth);
+        Tree r    = rec(body);
+        Tree sym  = deBruijn2Sym(r);
+        auto t0   = Clock::now();
+        Tree db   = sym2deBruijn(sym);
+        auto t1   = Clock::now();
+        gPtrSink  = reinterpret_cast<std::uintptr_t>(db);
+        std::string note = (db == r) ? "roundtrip=yes" : "roundtrip=NO";
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("symbolic-to-debruijn-hit", depth, runs, [=]() {
+        tlib::cleanup();
+        Tree body = makeRecursiveBody(depth);
+        Tree r    = rec(body);
+        Tree sym  = deBruijn2Sym(r);
+        Tree db   = sym2deBruijn(sym);
+        auto t0   = Clock::now();
+        Tree db2  = sym2deBruijn(sym);
+        auto t1   = Clock::now();
+        gPtrSink  = reinterpret_cast<std::uintptr_t>(db2);
+        std::string note = (db == db2) ? "cache-hit" : "NOT-SHARED";
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
+    reportMedian("alpha-equivalence-symbolic", alphaWork, runs, [=]() {
+        tlib::cleanup();
+        Tree var1;
+        Tree body1;
+        Tree var2;
+        Tree body2;
+        Tree r1 = makeSymbolicRecursiveTree(alphaDepth, 1, 96, var1, body1);
+        Tree r2 = makeSymbolicRecursiveTree(alphaDepth, 1, 96, var2, body2);
+        auto t0 = Clock::now();
+        bool eq = areEquiv(r1, r2);
+        auto t1 = Clock::now();
+        gCountSink = eq ? 1 : 0;
+        std::string note = std::string("equiv=") + (eq ? "yes" : "NO");
         tlib::cleanup();
         return BenchResult{ms(t0, t1), note};
     });
@@ -491,6 +743,8 @@ static void benchRecursiveTrees(int scale, int runs)
 
 int main(int argc, const char* argv[])
 {
+    tlib::init();
+
     int scale      = 1;
     int runs       = 15;
     int positional = 0;
@@ -529,6 +783,7 @@ int main(int argc, const char* argv[])
     benchTraversal(scale, runs);
     benchOccurrences(scale, runs);
     benchProperties(scale, runs);
+    benchRewrites(scale, runs);
     benchRecursiveTrees(scale, runs);
 
     // Keep the sinks observable.

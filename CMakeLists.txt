@@ -43,3 +43,7 @@ add_test(NAME tlib-tests COMMAND tlib-tests)
 # the benchmark executable
 add_executable(tlib-benchmark benchmark.cpp)
 target_link_libraries(tlib-benchmark PRIVATE tlib)
+
+# recursive tree conversion demo
+add_executable(tlib-recursive-demo recursive-demo.cpp)
+target_link_libraries(tlib-recursive-demo PRIVATE tlib)

@@ -7,10 +7,13 @@
 #include <iostream>
 
 #include "tests.hh"
+#include "tlib.hh"
 
 int main(int, const char**)
 {
     std::cout << "Tests tlib library\n";
+
+    tlib::init();
 
     bool r = true;
 

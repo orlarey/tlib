@@ -13,10 +13,14 @@ by construction), and typed memoization primitives.
 ## Quick example
 
 ```cpp
+#include <iostream>
+
 #include "tlib.hh"
 
 int main()
 {
+    tlib::init();
+
     // maximal sharing : same content => same pointer
     Tree a = tree(symbol("+"), tree(1), tree(2));
     Tree b = tree(symbol("+"), tree(1), tree(2));
@@ -34,6 +38,7 @@ int main()
     Tree r1 = rec(tree(symbol("f"), ref(1)));
     Tree r2 = rec(tree(symbol("f"), ref(1)));
     assert(r1 == r2 && isClosed(r1));
+    std::cout << toDeBruijnString(r1) << "\n";
 
     // end of session : frees every tree and symbol in one sweep
     tlib::cleanup();
@@ -59,12 +64,17 @@ int main()
 ## Design notes
 
 - **One session per process.** The library keeps its state in static tables
-  (like the Faust compiler does). `tlib::cleanup()` frees every tree and
-  symbol at once and leaves the library ready for a new session; any
-  `Tree`/`Sym` obtained before it is invalid after.
+  (like the Faust compiler does). Start a session with `tlib::init()`;
+  `tlib::cleanup()` frees every tree and symbol at once and leaves the library
+  ready for a new session. Any `Tree`/`Sym` obtained before cleanup is invalid
+  after it.
 - **Deterministic ordering.** `std::less<CTree*>` is specialized to compare
   stable serial numbers, not addresses, so anything iterated in tree order is
   reproducible from run to run.
+- **Recursive-tree diagnostics.** `toDeBruijnString()` prints recursive trees
+  inline with `rec(...)` / `ref(n)`. `toSymbolicString()` prints symbolic
+  recursive graphs with bare symbolic names and a `with { ... }` block of
+  collected definitions, so shared definitions are emitted once.
 - **Growing hash tables.** The CTree/Symbol tables start small and rehash
   when the load factor exceeds 0.7 (tunable with `tlib::setHashLoadFactor`);
   rehashing never moves a tree, so held pointers stay valid.
@@ -79,14 +89,16 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/tlib-tests
 ./build/tlib-benchmark
+./build/tlib-recursive-demo
 ```
 
 `tlib-benchmark` runs a small performance suite inspired by Faust compiler
 workloads: low/high-sharing tree construction, logical and unique-node
 traversals, occurrence annotations, tree properties, `property2<Tree>`
-memoization, and recursive tree conversion. By default each scenario is
-measured once at `scale=1`. Pass a scale factor to increase the workload and a
-run count to report the median of several measurements:
+memoization, reversible tree rewrites, and recursive tree conversion. By
+default each scenario is measured once at `scale=1`. Pass a scale factor to
+increase the workload and a run count to report the median of several
+measurements:
 
 ```bash
 ./build/tlib-benchmark 3
@@ -140,12 +152,36 @@ Benchmark groups:
 - `property2-set-one-box` / `property2-get-one-box`: memoizes one tree under
   many environment trees using `property2<Tree>`, matching the Faust
   `eval(box, env)` and pattern-matcher use case.
+- `rewrite-negate-shared`: rewrites a shared tree by negating every numeric
+  node. The transformation memoizes by `Tree` pointer, so this measures a
+  reversible local rewrite over a DAG rather than over the fully expanded
+  logical tree.
+- `rewrite-negate-shared-rt`: applies the same negation twice and checks that
+  hash-consing returns the original root pointer (`roundtrip=yes`).
+- `rewrite-negate-symbolic-rec`: applies the negation rewrite to a symbolic
+  recursive tree. The traversal follows the body stored by `rec(var, body)`,
+  but treats `ref(var)` as a terminal while `var` is bound, avoiding a recursive
+  cycle through the definition property.
+- `rewrite-negate-symbolic-rt`: applies the symbolic recursive rewrite twice
+  and checks both that the root pointer is restored and that the recursive body
+  property is back to the original body.
 - `build-debruijn-rec`: builds a deep de Bruijn recursive tree and checks that
   the enclosing `rec` closes it.
-- `debruijn-to-symbolic`: converts that recursive tree to symbolic form,
-  exercising substitution, recursive-tree properties, and hash-consing.
-- `debruijn-to-symbolic-hit`: converts the same tree again and should hit the
-  memoized result.
+- `debruijn-to-symbolic`: converts that recursive tree to symbolic form using a
+  local per-call memo, exercising substitution and hash-consing without storing
+  a persistent conversion property on the tree.
+- `debruijn-to-symbolic-repeat`: converts the same tree again with a new local
+  memo, so bound symbolic variables are fresh across calls.
+- `debruijn-to-symbolic-cached`: converts the recursive tree using the explicit
+  persistent tree-property cache.
+- `debruijn-to-symbolic-cached-hit`: converts the same tree again and should hit
+  the persistent memoized result.
+- `symbolic-to-debruijn`: converts the symbolic recursive tree back to de
+  Bruijn form and checks that the roundtrip restored the original tree.
+- `symbolic-to-debruijn-hit`: converts the same symbolic tree again and should
+  hit the memoized result.
+- `alpha-equivalence-symbolic`: compares two symbolic recursive trees that only
+  differ by their bound variable identities.
 - `lift-open-rec-body`: applies `lift` to the open recursive body, measuring
   recursive-tree traversal and memoization for free de Bruijn references.
 

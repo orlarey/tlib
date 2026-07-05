@@ -340,10 +340,68 @@ bool checkRecursiveTrees()
     Tree var = nullptr, sbody = nullptr;
     CHECK(isRec(s, var, sbody));
     CHECK(isTree(sbody, symbol("f")));
+    CHECK(toDeBruijnString(r1) == "rec(f(ref(1)))");
+    Tree back = sym2deBruijn(s);
+    CHECK(back == r1);
+    CHECK(sym2deBruijn(s) == back);  // memoized hit
+    CHECK(areEquiv(r1, s));
 
     // symbolic references
     Tree id = tree(unique("R"));
     CHECK(isRef(ref(id), var) && var == id);
+
+    Tree x = tree(unique("X"));
+    Tree y = tree(unique("Y"));
+    Tree z = tree(unique("Z"));
+    Tree sx = rec(x, tree(symbol("f"), ref(x)));
+    Tree sy = rec(y, tree(symbol("f"), ref(y)));
+    Tree sz = rec(z, tree(symbol("g"), ref(z)));
+    CHECK(sx != sy);
+    CHECK(areEquiv(sx, sy));
+    CHECK(!areEquiv(sx, sz));
+
+    Tree px = tree(symbol("x"));
+    Tree py = tree(symbol("y"));
+    Tree psx = rec(px, tree(symbol("f"), ref(px)));
+    Tree psy = rec(py, tree(symbol("f"), ref(py)));
+    (void)psy;
+    CHECK(toSymbolicString(psx) == "x\nwith {\n  x := f(x)\n}");
+
+    Tree sharedRoot = tree(symbol("h"), ref(px), ref(py), ref(px));
+    CHECK(toSymbolicString(sharedRoot) ==
+          "h(x, y, x)\nwith {\n  x := f(x)\n  y := f(y)\n}");
+
+    // nested recursion : ref(1) points to the inner rec, ref(2) to the outer rec
+    Tree nested = rec(tree(symbol("outer"), ref(1), rec(tree(symbol("inner"), ref(1), ref(2)))));
+    Tree snested = deBruijn2Sym(nested);
+    CHECK(sym2deBruijn(snested) == nested);
+    CHECK(areEquiv(nested, snested));
+
+    // Symbolic conversion demo:
+    // E is a closed de Bruijn recursion with two recursive nesting levels.
+    // G shares the same E three times, while C1 uses three symbolic copies of E
+    // produced by separate deBruijn2Sym calls.
+    Tree E  = rec(tree(symbol("mix"), ref(1),
+                       rec(tree(symbol("tap"), ref(1), ref(2),
+                                rec(tree(symbol("hold"), ref(1), ref(2), ref(3))))),
+                       tree(symbol("sum"), ref(1), rec(tree(symbol("echo"), ref(1), ref(2))))));
+    Tree G  = tree(symbol("foo"), E, E, E);
+    Tree S1 = deBruijn2Sym(E);
+    Tree S2 = deBruijn2Sym(E);
+    Tree S3 = deBruijn2Sym(E);
+    CHECK(S1 != S2 && S1 != S3 && S2 != S3);
+    CHECK(isClosed(E));
+    CHECK(toDeBruijnString(E).find("ref(3)") != std::string::npos);
+
+    Tree C1 = tree(symbol("foo"), S1, S2, S3);
+    CHECK(sym2deBruijn(C1) == G);
+    CHECK(areEquiv(deBruijn2Sym(G), C1));
+
+    Tree sharedSym = deBruijn2Sym(G);
+    CHECK(sharedSym->arity() == 3);
+    CHECK(sharedSym->branch(0) == sharedSym->branch(1));
+    CHECK(sharedSym->branch(1) == sharedSym->branch(2));
+    CHECK(areEquiv(sharedSym, C1));
 
     return ok;
 }
