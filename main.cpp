@@ -29,6 +29,7 @@ int main(int, const char**)
     r &= checkEnvironments();
     r &= checkRecursiveTrees();
     r &= checkRewrite();
+    r &= checkGuardedRewrite();
     r &= checkDnfCnf();
     r &= checkOccurrences();
     r &= checkErrorHandler();

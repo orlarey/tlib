@@ -18,6 +18,7 @@ bool checkSets();
 bool checkEnvironments();
 bool checkRecursiveTrees();
 bool checkRewrite();
+bool checkGuardedRewrite();
 bool checkDnfCnf();
 bool checkOccurrences();
 bool checkErrorHandler();

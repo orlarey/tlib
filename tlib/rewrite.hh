@@ -131,4 +131,143 @@ Tree treeRewriteInPlace(Tree root, Rule&& rule)
     return treeRewriteInPlaceMemo(root, rule, memo);
 }
 
+/**
+ * Annotation-guarded variants (see REWRITE-SPEC.md, "Reecriture gardee par
+ * annotation") : same bottom-up memoized traversal, plus a top-down guard
+ * consulted on each ORIGINAL node before descending into its children.
+ *
+ * Motivation : some rules have a premise that is a judgment on the SOURCE
+ * term (a type, an interval, any annotation computed by a prior analysis),
+ * not a property of its structure :
+ *
+ *     G |- t : [k,k]
+ *     --------------- (R1)
+ *        t -> k
+ *
+ * Such a premise does not survive reconstruction : once children have been
+ * rewritten, the rebuilt node is a fresh tree carrying no judgment, and R1
+ * can never fire again -- the rewrite is lost, not delayed. R1 must
+ * therefore be tried BEFORE the congruence descent (R2), on the original
+ * node. This priority is part of the semantics, not an optimization.
+ *
+ * pre : Tree -> Tree, called top-down on each original node (never on a
+ * SYMREC node, which the traversal handles itself) :
+ *   - returns nullptr : no decision here, descend into children as usual;
+ *   - returns r       : the whole subtree becomes r, children are never
+ *                       visited. r == t expresses "keep this node verbatim,
+ *                       don't enter it" (an opaque subtree).
+ *
+ * post : (Tree original, Tree rebuilt) -> Tree, the bottom-up rule, applied
+ * exactly once per visited node, in both paths (guarded or rebuilt).
+ * 'rebuilt' has already-rewritten children; 'original' is the node it came
+ * from (same pointer when nothing changed below), kept available so the rule
+ * can consult annotations attached to the original tree. Returning 'rebuilt'
+ * means "no local change".
+ *
+ * The single-rule treeRewrite(root, rule) is exactly equivalent to
+ * treeRewrite(root, [](Tree){ return nullptr; },
+ *                   [](Tree, Tree r){ return rule(r); }).
+ *
+ * Caveat : after a guarded rewrite, the judgments consulted by 'pre' are
+ * stale for the RESULT tree (new nodes carry no annotation). Recomputing
+ * them -- including any fixpoint on recursive definitions -- is the
+ * caller's pipeline's responsibility, as for any type-dependent pass.
+ */
+
+template <class Pre, class Post>
+Tree treeRewriteMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tree, Tree>& memo)
+{
+    auto it = memo.find(t);
+    if (it != memo.end()) {
+        return it->second;
+    }
+
+    Tree var  = nullptr;
+    Tree body = nullptr;
+    if (isRec(t, var, body)) {
+        TLIB_ASSERT(body != nullptr);
+        Tree newVar  = tree(unique("W"));
+        memo[t]      = ref(newVar);
+        Tree newBody = treeRewriteMemo(body, pre, post, memo);
+        return rec(newVar, newBody);
+    }
+
+    Tree r;
+    if (Tree cut = pre(t)) {
+        // guard fired : whole subtree decided here, children never visited
+        r = cut;
+    } else {
+        int ar = t->arity();
+        r      = t;
+        if (ar > 0) {
+            bool changed = false;
+            tvec br(ar);
+            for (int i = 0; i < ar; i++) {
+                br[i]   = treeRewriteMemo(t->branch(i), pre, post, memo);
+                changed = changed || (br[i] != t->branch(i));
+            }
+            if (changed) {
+                r = tree(t->node(), br);
+            }
+        }
+    }
+    Tree result = post(t, r);
+    memo[t]     = result;
+    return result;
+}
+
+template <class Pre, class Post>
+Tree treeRewrite(Tree root, Pre&& pre, Post&& post)
+{
+    std::unordered_map<Tree, Tree> memo;
+    return treeRewriteMemo(root, pre, post, memo);
+}
+
+template <class Pre, class Post>
+Tree treeRewriteInPlaceMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tree, Tree>& memo)
+{
+    auto it = memo.find(t);
+    if (it != memo.end()) {
+        return it->second;
+    }
+
+    Tree var  = nullptr;
+    Tree body = nullptr;
+    if (isRec(t, var, body)) {
+        TLIB_ASSERT(body != nullptr);
+        memo[t]      = t;
+        Tree newBody = treeRewriteInPlaceMemo(body, pre, post, memo);
+        return rec(var, newBody);
+    }
+
+    Tree r;
+    if (Tree cut = pre(t)) {
+        r = cut;
+    } else {
+        int ar = t->arity();
+        r      = t;
+        if (ar > 0) {
+            bool changed = false;
+            tvec br(ar);
+            for (int i = 0; i < ar; i++) {
+                br[i]   = treeRewriteInPlaceMemo(t->branch(i), pre, post, memo);
+                changed = changed || (br[i] != t->branch(i));
+            }
+            if (changed) {
+                r = tree(t->node(), br);
+            }
+        }
+    }
+    Tree result = post(t, r);
+    memo[t]     = result;
+    return result;
+}
+
+template <class Pre, class Post>
+Tree treeRewriteInPlace(Tree root, Pre&& pre, Post&& post)
+{
+    std::unordered_map<Tree, Tree> memo;
+    return treeRewriteInPlaceMemo(root, pre, post, memo);
+}
+
 #endif

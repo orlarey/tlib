@@ -12,6 +12,7 @@ date: 2026-07-06
 - **Rec et ref : un seul cas a traiter** — pourquoi `ref(var)` n'a pas besoin d'un cas separe.
 - **API proposee** — signature de `treeRewrite` et `treeRewriteInPlace`.
 - **Semantique bottom-up** — les deux algorithmes complets, cas ordinaire et cas `rec`.
+- **Reecriture gardee par annotation** — R1/R2 : regles a premisse sur le terme source, garde top-down `pre` + regle bottom-up `post`.
 - **Proprietes** — ce qui survit ou non a une reecriture.
 - **Relation avec tmap** — migration de l'usage historique.
 - **Exemple** — negation des nombres.
@@ -78,12 +79,18 @@ correctement `rec(var, body)`.
 
 - un moteur de reecriture par patterns ;
 - une strategie fixe-point ;
-- un mode top-down (l'unique benefice identifie, l'elagage, est une
-  optimisation de performance et non une capacite semantique — rien
-  n'empeche de l'ajouter plus tard sans changer le contrat) ;
+- ~~un mode top-down~~ — **revise** : l'elagage top-down n'est pas qu'une
+  optimisation. Le portage de la propagation de constantes du compilateur
+  Faust a montre qu'une regle dont la premisse est un *jugement sur le terme
+  source* (un type, un intervalle) ne peut pas s'exprimer en bottom-up pur :
+  la premisse ne survit pas a la reconstruction. D'ou la variante gardee
+  `pre`/`post` (voir *Reecriture gardee par annotation*). Le bottom-up seul
+  reste la forme recommandee pour les regles purement structurelles ;
 - la representation de Bruijn (`rec(body)` / `ref(n)`, aperture, `isClosed`) ;
-- un `RewriteContext` expose a l'utilisateur : la regle a exactement la
-  signature de `tfun` (`Tree(Tree)`), rien de plus ;
+- un `RewriteContext` expose a l'utilisateur : la regle de base a exactement
+  la signature de `tfun` (`Tree(Tree)`) ; la variante gardee ajoute deux
+  callables (`pre : Tree -> Tree`, `post : (Tree, Tree) -> Tree`), toujours
+  sans objet contexte ;
 - du calcul d'attributs dependant du contexte (compter des occurrences,
   threader un environnement comme `sym2deBruijnReady`) : ces calculs ont
   besoin d'une memoisation `(Tree, contexte) -> resultat`, hors de portee
@@ -288,6 +295,102 @@ deux conversions utilisent des memos locaux, conformes a la presente spec
 persistant par propriete). Cette re-canonicalisation est un choix de
 l'appelant, pas un travail de `treeRewrite`.
 
+## Reecriture gardee par annotation
+
+Cas rencontre en portant la propagation de constantes du backend OCPP de
+Faust (`sigNewConstantPropagation.cpp`) : certaines regles ont une premisse
+qui n'est pas une propriete structurelle du terme, mais un **jugement
+externe** — un type, un intervalle, toute annotation calculee par une analyse
+prealable sur l'arbre d'entree.
+
+```inference (R1)
+Γ ⊢ t : [k,k]
+---
+t → k
+```
+
+```inference (R2)
+x1 → v1; x2 → v2; ...; xn → vn
+---
+f(x1,...,xn) → f(v1,...,vn)
+```
+
+R1 replie tout terme dont l'intervalle certifie est reduit a un point ; R2
+est la congruence (la descente generique de `treeRewrite`, memo et `rec`
+compris).
+
+::: note [La priorite de R1 sur R2 est semantique, pas une optimisation]
+Le systeme n'est pas confluent sous strategie libre : si on applique R2
+d'abord (reecrire les enfants, reconstruire `f(v1,...,vn)`), le terme obtenu
+est *nouveau* et ne porte aucun jugement — R1 ne peut plus jamais s'y
+appliquer, et le repliage est **perdu**, pas seulement retarde. La strategie
+« essayer R1 avant de descendre, sinon R2 » fait partie de la definition du
+systeme. Un `treeRewrite` strictement bottom-up n'applique pas mal ce
+systeme : il en calcule un autre, qui replie moins.
+:::
+
+D'ou les surcharges gardees, memes noms avec un callable de plus :
+
+```cpp
+// pre : Tree -> Tree, appelee top-down sur le noeud ORIGINAL (jamais sur un
+//       SYMREC, gere par la traversee) :
+//   - nullptr : pas de decision ici, descente normale (R2) ;
+//   - r       : tout le sous-arbre devient r, enfants jamais visites.
+//               r == t exprime « garder tel quel, ne pas entrer »
+//               (sous-arbre opaque : waveform, generateur de table...).
+//
+// post : (Tree original, Tree rebuilt) -> Tree, la regle bottom-up,
+//        appliquee exactement une fois par noeud visite, dans les deux
+//        chemins (garde ou reconstruction). 'original' reste disponible pour
+//        consulter les annotations de l'arbre source ; retourner 'rebuilt'
+//        signifie « pas de changement local ».
+template <class Pre, class Post>
+Tree treeRewrite(Tree root, Pre&& pre, Post&& post);
+template <class Pre, class Post>
+Tree treeRewriteInPlace(Tree root, Pre&& pre, Post&& post);
+```
+
+```algorithm "treeRewriteMemo, variante gardee (cas ordinaire)"
+if t in memo then return memo[t] end
+if isRec(t, var, body) then ... identique a la variante simple ... end
+r <- pre(t)                       // decision top-down sur le noeud ORIGINAL
+if r = nullptr then
+  r <- reconstruction congruente depuis les enfants reecrits (R2)
+end
+result <- post(t, r)              // regle bottom-up : (original, reconstruit)
+memo[t] <- result
+return result
+```
+
+La forme a une seule regle est le cas particulier `pre = \_ -> nullptr`,
+`post = \(_, r) -> rule(r)` — aucune rupture d'API, une simple surcharge.
+
+Trois choix de conception :
+
+- **`nullptr` comme sentinelle de `pre`** (et non « meme pointeur =
+  descendre ») : il faut *trois* issues — descendre, remplacer sans
+  descendre, garder sans descendre — et `Tree` etant un pointeur, `nullptr`
+  les distingue naturellement. La convention de `post` reste celle de la
+  regle simple (meme pointeur = pas de changement).
+- **`post` s'applique aussi au resultat d'une garde** : fidele au modele
+  `postprocess(transformation(t))` du `TreeTransform` historique de Faust,
+  et sans cout pour une regle qui ne s'y interesse pas.
+- **`original` dans `post` sert a lire, jamais a transferer** : les
+  annotations du terme source guident la decision ; les copier sur le terme
+  reconstruit serait incorrect (le reconstruit merite souvent un jugement
+  plus fin, et `fType` etant porte par des pointeurs hashconses partages, une
+  copie aveugle pourrait ecraser le type d'un noeud partage ailleurs).
+
+::: warning [Apres une reecriture gardee, les jugements sont perimes]
+Les annotations consultees par `pre` decrivent l'arbre d'ENTREE. L'arbre
+resultat contient des noeuds neufs sans jugement, et pour des definitions
+recursives, recalculer les jugements peut exiger une recherche de point fixe
+(cas du typage de Faust : iteration avec elargissement, invalidation par
+generation). Ce recalcul est la responsabilite du pipeline appelant — la
+discipline est « reecrire, puis re-annoter », jamais « maintenir les
+annotations au fil de la reecriture ».
+:::
+
 ## Proprietes
 
 - les proprietes utilisateur ne sont pas copiees vers les nouveaux arbres ;
@@ -364,6 +467,19 @@ Tree negateNumbers(Tree root)
       restaure qu'a alpha-equivalence pres (variables fraiches a chaque
       passe) et `treeRewriteInPlace` restaure le contenu du corps.
 
+Variante gardee (`checkGuardedRewrite`) :
+
+- [ ] une garde qui remplace un noeud n'entraine jamais la visite de ses
+      enfants (verifie en enregistrant les noeuds vus par `pre`) ;
+- [ ] `pre` retournant `t` = sous-arbre opaque, garde verbatim (meme
+      pointeur) alors que `post` en aurait reecrit les feuilles ;
+- [ ] `post` recoit le noeud original a cote du reconstruit, et peut
+      consulter une annotation du premier pour decider du second ;
+- [ ] `pre` n'est jamais consultee sur un noeud `SYMREC`, et la variante
+      in-place reste stable en pointeur sous la paire identite ;
+- [ ] equivalence exacte avec la forme a une regle
+      (`pre = nullptr`, `post` ignorant l'original).
+
 ## Benchmarks attendus
 
 Les cinq scenarios sont implementes dans la section `[rewrites]` de
@@ -384,6 +500,11 @@ pour `treeRewriteInPlace`).
 ## Questions ouvertes
 
 Aucune pour l'instant. Decisions prises en cours de route :
+
+- le non-objectif « mode top-down » a ete revise apres le portage de la
+  propagation de constantes de Faust : les regles a premisse sur le terme
+  source (R1) exigent une garde top-down, ajoutee comme surcharge
+  `pre`/`post` sans changer la forme a une regle ;
 
 - les noms publics sont `treeRewrite`/`treeRewriteInPlace` (prefixe `tree`
   pour eviter tout clash de nom lors de l'integration de `tlib` dans le
