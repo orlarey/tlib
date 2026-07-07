@@ -246,54 +246,20 @@ static Tree negateNodeNumbers(const Node& n)
     }
 }
 
-static Tree rebuildWithBranches(const Node& n, const tvec& br)
+// Bottom-up rules for treeRewrite/treeRewriteInPlace (see tlib/rewrite.hh).
+// The rule receives a node whose branches are already transformed.
+static Tree negateRule(Tree t)
 {
-    return br.empty() ? tree(n) : tree(n, br);
-}
-
-static Tree negateNumbersSymbolicRec(Tree t, std::unordered_map<Tree, Tree>& memo)
-{
-    auto it = memo.find(t);
-    if (it != memo.end()) {
-        return it->second;
-    }
-
-    Tree var;
-    Tree body;
-    if (isRec(t, var, body)) {
-        // In symbolic recursive trees, rec(var, body) and ref(var) have the same
-        // structural Tree. Store a temporary self mapping before descending so
-        // recursive references stop here and do not re-enter the body. This
-        // rewrite only negates numbers, so the symbolic variable itself stays
-        // unchanged; rebuilding with rec(var, newBody) is only used to replace
-        // the RECDEF property attached to this shared SYMREC(var) node.
-        TLIB_ASSERT(body != nullptr);
-        memo[t]      = t;
-        Tree newBody = negateNumbersSymbolicRec(body, memo);
-        if (newBody != body) {
-            (void)rec(var, newBody);
-        }
+    Tree numeric = negateNodeNumbers(t->node());
+    if (!numeric) {
         return t;
     }
+    return (t->arity() == 0) ? numeric : tree(numeric->node(), t->branches());
+}
 
-    Tree numeric = negateNodeNumbers(t->node());
-    int  ar      = t->arity();
-    if (ar == 0) {
-        Tree result = numeric ? numeric : t;
-        memo[t]     = result;
-        return result;
-    }
-
-    bool changed = (numeric != nullptr);
-    tvec br(ar);
-    for (int i = 0; i < ar; ++i) {
-        br[i] = negateNumbersSymbolicRec(t->branch(i), memo);
-        changed = changed || (br[i] != t->branch(i));
-    }
-
-    Tree result = changed ? rebuildWithBranches(numeric ? numeric->node() : t->node(), br) : t;
-    memo[t]     = result;
-    return result;
+static Tree identityRule(Tree t)
+{
+    return t;
 }
 
 static void benchConstruction(int scale, int runs)
@@ -541,12 +507,23 @@ static void benchRewrites(int scale, int runs)
     const int recDepth    = 10 + (scale > 2 ? 1 : 0);
     const std::size_t recWork = fullTernaryNodes(recDepth);
 
+    reportMedian("rewrite-identity-shared", fullBinaryNodes(sharedDepth), runs, [=]() {
+        tlib::cleanup();
+        Tree root = makeHighSharingTree(sharedDepth, 1, 128);
+        auto t0 = Clock::now();
+        Tree rewritten = treeRewrite(root, identityRule);
+        auto t1 = Clock::now();
+        gPtrSink = reinterpret_cast<std::uintptr_t>(rewritten);
+        std::string note = "identity=" + std::string((rewritten == root) ? "yes" : "NO");
+        tlib::cleanup();
+        return BenchResult{ms(t0, t1), note};
+    });
+
     reportMedian("rewrite-negate-shared", fullBinaryNodes(sharedDepth), runs, [=]() {
         tlib::cleanup();
         Tree root = makeHighSharingTree(sharedDepth, 1, 128);
-        std::unordered_map<Tree, Tree> memo;
         auto t0 = Clock::now();
-        Tree rewritten = negateNumbersSymbolicRec(root, memo);
+        Tree rewritten = treeRewrite(root, negateRule);
         auto t1 = Clock::now();
         gPtrSink = reinterpret_cast<std::uintptr_t>(rewritten);
         std::string note = "changed=" + std::string((rewritten != root) ? "yes" : "no");
@@ -557,55 +534,57 @@ static void benchRewrites(int scale, int runs)
     reportMedian("rewrite-negate-shared-rt", fullBinaryNodes(sharedDepth) * 2, runs, [=]() {
         tlib::cleanup();
         Tree root = makeHighSharingTree(sharedDepth, 1, 128);
-        std::unordered_map<Tree, Tree> memo1;
-        std::unordered_map<Tree, Tree> memo2;
         auto t0 = Clock::now();
-        Tree rewritten = negateNumbersSymbolicRec(root, memo1);
-        Tree restored  = negateNumbersSymbolicRec(rewritten, memo2);
+        Tree rewritten = treeRewrite(root, negateRule);
+        Tree restored  = treeRewrite(rewritten, negateRule);
         auto t1 = Clock::now();
         gPtrSink = reinterpret_cast<std::uintptr_t>(restored);
+        // no rec in this DAG : hash-consing restores the exact pointer
         std::string note = "roundtrip=" + std::string((restored == root) ? "yes" : "NO");
         tlib::cleanup();
         return BenchResult{ms(t0, t1), note};
     });
 
-    reportMedian("rewrite-negate-symbolic-rec", recWork, runs, [=]() {
+    reportMedian("rewrite-symbolic-rec-pure", recWork, runs, [=]() {
         tlib::cleanup();
         Tree var;
         Tree body;
         Tree root = makeSymbolicRecursiveTree(recDepth, 1, 96, var, body);
-        std::unordered_map<Tree, Tree> memo;
         auto t0 = Clock::now();
-        Tree rewritten = negateNumbersSymbolicRec(root, memo);
+        Tree rewritten = treeRewrite(root, negateRule);
         auto t1 = Clock::now();
+        // pure : fresh variable, and the old definition is left untouched
         Tree newVar;
         Tree newBody;
-        bool changed = isSymbolicRecDef(rewritten, newVar, newBody) && newBody != body;
+        Tree oldVar;
+        Tree oldBody;
+        bool fresh     = isSymbolicRecDef(rewritten, newVar, newBody) && rewritten != root &&
+                         newVar != var && newBody != body;
+        bool oldIntact = isSymbolicRecDef(root, oldVar, oldBody) && oldBody == body;
         gPtrSink = reinterpret_cast<std::uintptr_t>(rewritten);
-        std::string note = "body-changed=" + std::string(changed ? "yes" : "no");
+        std::string note = "pure=" + std::string((fresh && oldIntact) ? "yes" : "NO");
         tlib::cleanup();
         return BenchResult{ms(t0, t1), note};
     });
 
-    reportMedian("rewrite-negate-symbolic-rt", recWork * 2, runs, [=]() {
+    reportMedian("rewrite-symbolic-rec-inplace", recWork * 2, runs, [=]() {
         tlib::cleanup();
         Tree var;
         Tree body;
         Tree root = makeSymbolicRecursiveTree(recDepth, 1, 96, var, body);
-        std::unordered_map<Tree, Tree> memo1;
-        std::unordered_map<Tree, Tree> memo2;
         auto t0 = Clock::now();
-        Tree rewritten = negateNumbersSymbolicRec(root, memo1);
-        Tree restored  = negateNumbersSymbolicRec(rewritten, memo2);
+        Tree rewritten = treeRewriteInPlace(root, negateRule);
+        Tree restored  = treeRewriteInPlace(rewritten, negateRule);
         auto t1 = Clock::now();
+        // treeRewriteInPlace reuses `var` and mutates the shared rec node's
+        // RECDEF property, so `restored == root` holds by construction
+        // whatever happens. The only meaningful signal is the body content
+        // (see the warning in REWRITE-SPEC.md).
         Tree restoredVar;
         Tree restoredBody;
-        bool bodyRestored = isSymbolicRecDef(restored, restoredVar, restoredBody) && restoredBody == body;
+        bool bodyRestored = isSymbolicRecDef(restored, restoredVar, restoredBody) &&
+                            restoredBody == body;
         gPtrSink = reinterpret_cast<std::uintptr_t>(restored);
-        // Like a Simplify(x:=body) -> x:=Simplify(body) rewrite, negateNumbersSymbolicRec
-        // reuses `var` and mutates the shared rec node's body property in place, so
-        // `restored` is always the same pointer as `root` regardless of correctness.
-        // The only meaningful signal here is whether the body content round-tripped.
         std::string note = "roundtrip=" + std::string(bodyRestored ? "yes" : "NO");
         tlib::cleanup();
         return BenchResult{ms(t0, t1), note};

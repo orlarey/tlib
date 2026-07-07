@@ -28,6 +28,7 @@ int main(int, const char**)
     r &= checkSets();
     r &= checkEnvironments();
     r &= checkRecursiveTrees();
+    r &= checkRewrite();
     r &= checkDnfCnf();
     r &= checkOccurrences();
     r &= checkErrorHandler();

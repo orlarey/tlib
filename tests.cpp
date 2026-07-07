@@ -407,6 +407,87 @@ bool checkRecursiveTrees()
 }
 
 //-----------------------------------------------------------------------------
+// Bottom-up rewriting (treeRewrite / treeRewriteInPlace, see REWRITE-SPEC.md)
+//-----------------------------------------------------------------------------
+
+bool checkRewrite()
+{
+    bool ok = true;
+
+    auto id     = [](Tree t) { return t; };
+    auto negate = [](Tree t) {
+        int i;
+        return isInt(t->node(), &i) ? tree(-i) : t;
+    };
+
+    // identity on an ordinary tree : pointer equality for both functions
+    Tree a  = tree(symbol("a"));
+    Tree b  = tree(symbol("b"));
+    Tree t1 = tree(symbol("foo"), tree(symbol("g"), a, tree(1)), b);
+    CHECK(treeRewrite(t1, id) == t1);
+    CHECK(treeRewriteInPlace(t1, id) == t1);
+
+    // leaf change : only the ancestors of the changed leaf are rebuilt
+    Tree left = tree(symbol("g"), a, tree(1));
+    Tree t2   = tree(symbol("foo"), left, b);
+    Tree r2   = treeRewrite(t2, negate);
+    CHECK(r2 != t2);
+    CHECK(r2->branch(0) != left);          // rebuilt : contained the 1
+    CHECK(r2->branch(0)->branch(0) == a);  // untouched leaf kept
+    CHECK(r2->branch(1) == b);             // untouched subtree kept
+    CHECK(tree2int(r2->branch(0)->branch(1)) == -1);
+
+    // sharing : foo(s, s) transforms s once, result branches stay shared
+    Tree s  = tree(symbol("h"), tree(2));
+    Tree t3 = tree(symbol("foo"), s, s);
+    Tree r3 = treeRewrite(t3, negate);
+    CHECK(r3->branch(0) == r3->branch(1));
+    CHECK(tree2int(r3->branch(0)->branch(0)) == -2);
+
+    // hash-consing : double negation restores the initial pointer
+    CHECK(treeRewrite(treeRewrite(t2, negate), negate) == t2);
+
+    // identity on a recursive tree : treeRewriteInPlace is pointer-stable,
+    // treeRewrite mints a fresh variable and is only alpha-equivalent
+    Tree x  = tree(unique("X"));
+    Tree rx = rec(x, tree(symbol("f"), tree(3), ref(x)));
+    CHECK(treeRewriteInPlace(rx, id) == rx);
+    Tree fx = treeRewrite(rx, id);
+    CHECK(fx != rx);
+    CHECK(areEquiv(fx, rx));
+
+    // separate calls do not share a memo : each call mints its own variable
+    CHECK(treeRewrite(rx, id) != treeRewrite(rx, id));
+
+    // treeRewrite on a recursive tree : old RECDEF untouched, new body
+    // transformed, self-reference remapped to the new definition
+    Tree var0 = nullptr, body0 = nullptr;
+    CHECK(isRec(rx, var0, body0));
+    Tree rr   = treeRewrite(rx, negate);
+    Tree var1 = nullptr, body1 = nullptr;
+    CHECK(isRec(rx, var1, body1) && body1 == body0);  // old def intact
+    Tree var2 = nullptr, body2 = nullptr;
+    CHECK(isRec(rr, var2, body2));
+    CHECK(var2 != var0);
+    CHECK(tree2int(body2->branch(0)) == -3);
+    CHECK(body2->branch(1) == rr);   // self-reference follows the new var
+    CHECK(body0->branch(1) == rx);   // old self-reference intact
+
+    // treeRewriteInPlace on a recursive tree : same pointer no matter what, so
+    // the verification must look at the body content (see the spec warning)
+    Tree y  = tree(unique("Y"));
+    Tree ry = rec(y, tree(symbol("f"), tree(4), ref(y)));
+    Tree rp = treeRewriteInPlace(ry, negate);
+    CHECK(rp == ry);
+    Tree var3 = nullptr, body3 = nullptr;
+    CHECK(isRec(ry, var3, body3));
+    CHECK(tree2int(body3->branch(0)) == -4);  // body replaced in place
+    CHECK(body3->branch(1) == ry);            // self-reference preserved
+
+    return ok;
+}
+
+//-----------------------------------------------------------------------------
 // DNF/CNF conditions
 //-----------------------------------------------------------------------------
 
