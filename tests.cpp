@@ -343,7 +343,7 @@ bool checkRecursiveTrees()
     CHECK(toDeBruijnString(r1) == "rec(f(ref(1)))");
     Tree back = sym2deBruijn(s);
     CHECK(back == r1);
-    CHECK(sym2deBruijn(s) == back);  // memoized hit
+    CHECK(sym2deBruijn(s) == back);  // deterministic : hash-consing gives the same tree
     CHECK(areEquiv(r1, s));
 
     // symbolic references

@@ -10,8 +10,8 @@ date: 2026-07-06
 - **Objectifs** — les garanties que la nouvelle primitive doit tenir.
 - **Non-objectifs** — ce qui reste hors perimetre.
 - **Rec et ref : un seul cas a traiter** — pourquoi `ref(var)` n'a pas besoin d'un cas separe.
-- **API proposee** — signature de `rewrite` et `RewriteOptions`.
-- **Semantique bottom-up** — l'algorithme complet, cas ordinaire et cas `rec`.
+- **API proposee** — signature de `rewrite` et `rewriteInPlace`.
+- **Semantique bottom-up** — les deux algorithmes complets, cas ordinaire et cas `rec`.
 - **Proprietes** — ce qui survit ou non a une reecriture.
 - **Relation avec tmap** — migration de l'usage historique.
 - **Exemple** — negation des nombres.
@@ -33,11 +33,18 @@ Il existe deja plusieurs formes de transformation :
 
 - `tmap(key, f, t)` : parcours bottom-up generique avec memoisation par
   propriete persistante sur les arbres.
-- `substitute(t, id, val)` : remplacement structurel specialise, aussi base
-  sur une propriete temporaire identifiee par une cle fraiche.
+- `substitute(t, id, val)` : remplacement structurel specialise, memoise par
+  une propriete sous cle fraiche a chaque appel. La cle est unique mais les
+  entrees, elles, restent attachees aux arbres apres l'appel : le commentaire
+  du type `plist` dans `tree.hh` documente un cas reel ou un seul noeud
+  accumule des dizaines de milliers de proprietes venant precisement de ce
+  schema (`substitute()`/`liftn()`). C'est l'argument le plus concret en
+  faveur du memo local.
 - `negateNumbersSymbolicRec` dans `benchmark.cpp` : prototype de rewrite local
-  avec `std::unordered_map<Tree, Tree>`, qui traite deja `rec(var, body)`
-  correctement (voir plus bas).
+  avec `std::unordered_map<Tree, Tree>`, qui traite deja `rec(var, body)` en
+  un seul cas (`isRec`, jamais `isRef` — voir *Rec et ref* plus bas), mais
+  selon l'approche `InPlace`, avec la limite de test que cela implique (voir
+  l'avertissement dans *Semantique bottom-up*).
 
 (`lift`, `deBruijn2Sym`, `sym2deBruijn` existent aussi dans la bibliotheque
 mais concernent la representation de Bruijn, hors perimetre de cette spec.)
@@ -57,7 +64,7 @@ correctement `rec(var, body)`.
   transforme une seule fois, le resultat est partage.
 - **Reconstruction minimale** : si rien ne change, le resultat est exactement
   le meme pointeur — sauf pour `rewrite` sur un noeud `rec`, ou une variable
-  fraiche est toujours mintee (voir *Semantique bottom-up*) : la purete y
+  fraiche est toujours creee (voir *Semantique bottom-up*) : la purete y
   prime sur l'identite de pointeur.
 - **Recursion symbolique correcte** : traiter `rec(var, body)` sans dupliquer
   le travail ni boucler, avec un choix explicite sur ce qu'il advient de la
@@ -140,22 +147,26 @@ Contrat de la regle :
 Input: arbre root, regle rule
 Output: arbre transforme
 memo <- table vide Tree -> Tree, locale a cet appel
-return rewriteRec(root, rule, memo)
+return rewriteMemo(root, rule, memo)
 
-function rewriteRec(t, rule, memo)    // memo passe par reference
+function rewriteMemo(t, rule, memo)    // memo passe par reference
   if t in memo then
     return memo[t]
   end
   if isRec(t, var, body) then
     newVar <- variable fraiche
     memo[t] <- ref(newVar)
-    newBody <- rewriteRec(body, rule, memo)
+    newBody <- rewriteMemo(body, rule, memo)
     return rec(newVar, newBody)
   end
+  branches <- []
+  changed <- false
   for each branch b of t do
-    b <- rewriteRec(b, rule, memo)
+    b2 <- rewriteMemo(b, rule, memo)
+    branches <- branches + [b2]
+    changed <- changed or (b2 != b)
   end
-  r <- tree(t.node(), branches) if a branch changed, else t
+  r <- tree(t.node(), branches) if changed, else t
   result <- rule(r)
   memo[t] <- result
   return result
@@ -166,21 +177,25 @@ end
 Input: arbre root, regle rule
 Output: arbre transforme
 memo <- table vide Tree -> Tree, locale a cet appel
-return rewriteInPlaceRec(root, rule, memo)
+return rewriteInPlaceMemo(root, rule, memo)
 
-function rewriteInPlaceRec(t, rule, memo)    // memo passe par reference
+function rewriteInPlaceMemo(t, rule, memo)    // memo passe par reference
   if t in memo then
     return memo[t]
   end
   if isRec(t, var, body) then
     memo[t] <- t
-    newBody <- rewriteInPlaceRec(body, rule, memo)
+    newBody <- rewriteInPlaceMemo(body, rule, memo)
     return rec(var, newBody)
   end
+  branches <- []
+  changed <- false
   for each branch b of t do
-    b <- rewriteInPlaceRec(b, rule, memo)
+    b2 <- rewriteInPlaceMemo(b, rule, memo)
+    branches <- branches + [b2]
+    changed <- changed or (b2 != b)
   end
-  r <- tree(t.node(), branches) if a branch changed, else t
+  r <- tree(t.node(), branches) if changed, else t
   result <- rule(r)
   memo[t] <- result
   return result
@@ -229,6 +244,15 @@ Deux consequences du `return` direct dans le cas `rec` :
   externes de `t` recevraient deux resultats differents, en violation de la
   semantique constructive).
 
+Precondition sur les references pendantes : attention, le `isRec(t, var,
+body)` de la bibliotheque retourne vrai pour **tout** noeud `SYMREC`, meme
+sans propriete `RECDEF` (le corps est alors nul — voir `isSymbolicRec` dans
+`recursive-tree.cpp`). Un `ref(var)` dont la variable n'a jamais ete definie
+par un `rec(var, body)` ferait donc entrer l'algorithme dans le cas `rec`
+avec un corps nul. C'est une erreur de l'appelant : l'implementation doit la
+detecter (`TLIB_ASSERT(body != nullptr)`), comme le fait deja le prototype
+(benchmark.cpp:270).
+
 ::: warning [`rewriteInPlace` : l'identite de pointeur ne prouve rien]
 `rewriteInPlace` reutilise `var`, donc reecrit `RECDEF` sur le noeud
 partage — destructif au sens logique, a n'utiliser qu'en connaissance de
@@ -239,6 +263,25 @@ le pointeur racine ne change jamais avec cette approche. Toute reecriture qui
 passe par `rewriteInPlace` doit comparer le *contenu* du corps (`areEquiv` ou
 comparaison structurelle), jamais l'identite du noeud racine.
 :::
+
+**Partage maximal apres reecriture.** Une reecriture peut rendre
+alpha-equivalentes des definitions recursives qui ne l'etaient pas : avec
+`X = Foo(1, X)` et `Y = Foo(2, Y)`, une regle qui remplace `1` et `2` par `0`
+produit deux definitions dont les corps sont identiques a renommage pres. La
+representation symbolique ne peut pas les fusionner (les variables restent
+distinctes), et `rewrite` ne cherche pas a le faire — pas plus qu'il ne
+cherche a stabiliser les noms d'une passe a l'autre (chaque appel cree des
+variables fraiches). Si l'utilisateur veut retrouver un partage maximal, la
+bibliotheque fournit deja l'outil : la double conversion
+`deBruijn2Sym(sym2deBruijn(t))`. Le passage par de Bruijn efface les noms
+(representation canonique a alpha-equivalence pres), le hash-consing fusionne
+alors les definitions devenues identiques, et le retour en symbolique
+reconstruit des definitions partagees — c'est exactement le mecanisme
+« maximal sharing on recursive trees » documente en tete de `tree.hh`. Les
+deux conversions utilisent des memos locaux, conformes a la presente spec
+(seule la variante explicite `deBruijn2SymCached` conserve un cache
+persistant par propriete). Cette re-canonicalisation est un choix de
+l'appelant, pas un travail de `rewrite`.
 
 ## Proprietes
 
@@ -253,7 +296,8 @@ structurelle ne sait pas lesquelles restent valides apres reecriture.
 ## Relation avec tmap
 
 `tmap` devient une primitive historique/legacy. La nouvelle API a exactement
-la meme forme d'appelable (`Tree(Tree)`), donc la migration est directe :
+la meme forme d'appelable (`Tree(Tree)`), donc la migration est
+syntaxiquement directe :
 
 ```cpp
 Tree r = rewrite(t, [](Tree x) {
@@ -263,6 +307,15 @@ Tree r = rewrite(t, [](Tree x) {
 
 Differences : memo local (pas de propriete persistante), et une semantique
 explicite pour `rec(var, body)`.
+
+::: caution [La migration n'est pas neutre sur les arbres recursifs]
+`tmap` applique `f` aux noeuds `SYMREC` (traites comme des noeuds ordinaires
+dont l'unique branche est `var`) et ne descend jamais dans `RECDEF` ;
+`rewrite` fait exactement l'inverse (descend dans les definitions, n'applique
+jamais la regle aux `SYMREC`). Sur un arbre sans recursion symbolique les deux
+coincident ; sur un arbre recursif, migrer un appel `tmap` vers `rewrite`
+change le comportement et doit etre verifie au cas par cas.
+:::
 
 ## Exemple
 
@@ -291,26 +344,30 @@ Tree negateNumbers(Tree root)
 - [ ] identity rewrite sur arbre contenant `rec` : `rewriteInPlace(t, id) ==
       t` (pointeur) mais seulement `areEquiv(rewrite(t, id), t)` pour
       `rewrite` (alpha-equivalence — une variable fraiche est toujours
-      mintee) ;
+      creee) ;
 - [ ] changement de feuille : seuls les ancetres necessaires sont reconstruits ;
 - [ ] partage : `foo(a, a)` devient `foo(b, b)` avec `branch(0) == branch(1)` ;
 - [ ] deux appels separes ne partagent pas de memo ;
-- [ ] `rewrite` : ancien arbre non modifie (RECDEF de l'ancien `SYMREC(var)`
-      intact), corps du nouveau correct (`areEquiv`) ;
+- [ ] `rewrite` avec une regle non-identite sur un `rec` : la `RECDEF` de
+      l'ancien `SYMREC(var)` reste inchangee (l'ancien arbre reste valide et
+      utilisable), et le nouveau `rec(newVar, ...)` porte bien le corps
+      transforme par la regle ;
 - [ ] `rewriteInPlace` : corps remplace explicitement, verifie par egalite de
       *contenu*, jamais par identite de pointeur de la racine ;
 - [ ] interaction avec hash-consing : double negation numerique restaure le
-      pointeur initial quand applicable.
+      pointeur initial sur un arbre sans `rec` ; avec `rec`, `rewrite` ne
+      restaure qu'a alpha-equivalence pres (variables fraiches a chaque
+      passe) et `rewriteInPlace` restaure le contenu du corps.
 
 ## Benchmarks attendus
 
 | Scenario | Statut | A faire |
 |:--|:--|:--|
-| `rewrite-identity-shared` | nouveau | valider `rewrite(t, id) == t` sur un DAG a forte partage |
+| `rewrite-identity-shared` | nouveau | valider `rewrite(t, id) == t` sur un DAG a forte partage, sans `rec` (avec `rec`, l'egalite de pointeur ne peut pas tenir) |
 | `rewrite-negate-shared` | existe deja (`benchmark.cpp:544`) | migrer vers `rewrite()` une fois implemente |
 | `rewrite-negate-shared-rt` | existe deja (`benchmark.cpp:557`) | idem, avec round-trip |
 | `rewrite-symbolic-rec-pure` | nouveau | premier scenario a exercer reellement `rewrite` (variables fraiches) |
-| `rewrite-symbolic-rec-inplace` | proche de `rewrite-negate-symbolic-rec`/`-rt` (`benchmark.cpp:572`, `:590`) | clarifier le nommage — voir question ouverte 3 |
+| `rewrite-symbolic-rec-inplace` | proche de `rewrite-negate-symbolic-rec`/`-rt` (`benchmark.cpp:572`, `:590`) | clarifier le nommage — voir question ouverte 2 |
 
 Chaque benchmark reporte le nombre de noeuds logiques, le temps median, et une
 note de validation basee sur le contenu (jamais sur l'identite de pointeur
@@ -320,9 +377,7 @@ pour `rewriteInPlace`).
 
 1. Les noms publics doivent-ils etre `rewrite`/`rewriteInPlace`, ou autre
    chose (`rewriteTree`/`rewriteTreeInPlace`, `transform`/`transformInPlace`) ?
-2. `rewrite` doit-il toujours creer des variables fraiches, ou seulement
-   quand le corps change ?
-3. Les benchmarks `rewrite-negate-shared(-rt)` et
+2. Les benchmarks `rewrite-negate-shared(-rt)` et
    `rewrite-negate-symbolic-rec(-rt)` existent deja dans `benchmark.cpp`
    contre le prototype `negateNumbersSymbolicRec`. Faut-il les migrer telles
    quelles vers la nouvelle primitive, ou les garder comme reference et

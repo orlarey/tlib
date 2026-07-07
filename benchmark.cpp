@@ -697,7 +697,7 @@ static void benchRecursiveTrees(int scale, int runs)
         return BenchResult{ms(t0, t1), note};
     });
 
-    reportMedian("symbolic-to-debruijn-hit", depth, runs, [=]() {
+    reportMedian("symbolic-to-debruijn-repeat", depth, runs, [=]() {
         tlib::cleanup();
         Tree body = makeRecursiveBody(depth);
         Tree r    = rec(body);
@@ -707,7 +707,10 @@ static void benchRecursiveTrees(int scale, int runs)
         Tree db2  = sym2deBruijn(sym);
         auto t1   = Clock::now();
         gPtrSink  = reinterpret_cast<std::uintptr_t>(db2);
-        std::string note = (db == db2) ? "cache-hit" : "NOT-SHARED";
+        // sym2deBruijn uses a local memo : the second call recomputes, and
+        // pointer equality comes from hash-consing (canonical result), not
+        // from a persistent cache.
+        std::string note = (db == db2) ? "stable" : "BAD";
         tlib::cleanup();
         return BenchResult{ms(t0, t1), note};
     });
