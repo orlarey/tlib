@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -496,7 +497,7 @@ bool checkGuardedRewrite()
 {
     bool ok = true;
 
-    auto negatePost = [](Tree, Tree r) {
+    auto negatePost = [](Tree r) {
         int i;
         return isInt(r->node(), &i) ? tree(-i) : r;
     };
@@ -511,15 +512,18 @@ bool checkGuardedRewrite()
     g->setProperty(judgment, tree(42));
 
     std::vector<Tree> preSeen;
-    auto              guard = [&](Tree t) -> Tree {
+    auto              guard = [&](Tree t) -> std::optional<Tree> {
         preSeen.push_back(t);
-        return t->getProperty(judgment);  // nullptr when no judgment
+        if (Tree v = t->getProperty(judgment)) {
+            return v;
+        }
+        return std::nullopt;
     };
 
     Tree r = treeRewrite(f, guard, negatePost);
-    // g is cut to 42 (then negated by post), its children 1 and 2 are never
-    // visited; h is descended into, its leaf 3 negated; f is rebuilt.
-    CHECK(r == tree(symbol("f"), tree(-42), tree(symbol("h"), tree(-3))));
+    // g is cut to 42, its children 1 and 2 are never visited, and post is not
+    // applied to a guarded replacement; h is descended into, its leaf 3 negated.
+    CHECK(r == tree(symbol("f"), tree(42), tree(symbol("h"), tree(-3))));
     bool visited1 = false, visited2 = false;
     for (Tree t : preSeen) {
         visited1 = visited1 || (t == tree(1));
@@ -531,9 +535,12 @@ bool checkGuardedRewrite()
 
     // pre returning t itself = opaque subtree : kept verbatim even though
     // post would have rewritten its leaves
-    auto opaqueH = [](Tree t) -> Tree {
+    auto opaqueH = [](Tree t) -> std::optional<Tree> {
         Tree x1;
-        return isTree(t, symbol("h"), x1) ? t : nullptr;
+        if (isTree(t, symbol("h"), x1)) {
+            return t;
+        }
+        return std::nullopt;
     };
     Tree r2 = treeRewrite(f, opaqueH, negatePost);
     CHECK(r2 == tree(symbol("f"),
@@ -541,30 +548,16 @@ bool checkGuardedRewrite()
                      h));                                    // opaque, kept as-is
     CHECK(r2->branch(1) == h);  // same pointer : not even reconstructed
 
-    // post receives the ORIGINAL node alongside the rebuilt one : when a
-    // child changed, original != rebuilt and original still carries its
-    // annotations
-    Tree mark = tree(symbol("GUARD-MARK"));
-    h->setProperty(mark, tree(7));
-    auto nullGuard = [](Tree) -> Tree { return nullptr; };
-    auto stamp     = [&](Tree orig, Tree rebuilt) -> Tree {
-        int i;
-        if (isInt(rebuilt->node(), &i)) {
-            return tree(-i);
-        }
-        if (Tree v = orig->getProperty(mark)) {
-            // decision taken from the ORIGINAL node's annotation, applied to
-            // the rebuilt node
-            return tree(symbol("marked"), rebuilt, v);
-        }
-        return rebuilt;
-    };
-    Tree r3 = treeRewrite(f, nullGuard, stamp);
-    // h's leaf was negated (so rebuilt != orig for h), and the mark read on
-    // the original h was transferred to the rebuilt one
-    Tree expectedH = tree(symbol("marked"), tree(symbol("h"), tree(-3)), tree(7));
-    CHECK(r3->branch(1) == expectedH);
-    h->clearProperty(mark);
+    auto nullGuard = [](Tree) -> std::optional<Tree> { return std::nullopt; };
+
+    // post is only a bottom-up rule on rebuilt nodes. It is not applied to a
+    // guarded replacement, which makes guarded cuts semantically opaque.
+    Tree r3 = treeRewrite(f, guard, negatePost);
+    CHECK(r3->branch(0) == tree(symbol("g"), tree(-1), tree(-2)));
+    g->setProperty(judgment, tree(42));
+    Tree r4 = treeRewrite(f, guard, negatePost);
+    CHECK(r4->branch(0) == tree(42));
+    g->clearProperty(judgment);
 
     // recursive trees : the guard is never consulted on SYMREC nodes, and
     // the in-place variant stays pointer-stable under the identity pair

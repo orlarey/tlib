@@ -332,18 +332,19 @@ systeme : il en calcule un autre, qui replie moins.
 D'ou les surcharges gardees, memes noms avec un callable de plus :
 
 ```cpp
-// pre : Tree -> Tree, appelee top-down sur le noeud ORIGINAL (jamais sur un
-//       SYMREC, gere par la traversee) :
-//   - nullptr : pas de decision ici, descente normale (R2) ;
-//   - r       : tout le sous-arbre devient r, enfants jamais visites.
-//               r == t exprime « garder tel quel, ne pas entrer »
-//               (sous-arbre opaque : waveform, generateur de table...).
+// pre : Tree -> std::optional<Tree>, appelee top-down sur le noeud ORIGINAL
+//       (jamais sur un SYMREC, gere par la traversee) :
+//   - std::nullopt : pas de decision ici, descente normale (R2) ;
+//   - r            : tout le sous-arbre devient r, enfants jamais visites,
+//                    post n'est pas appelee. r == t exprime « garder tel
+//                    quel, ne pas entrer » (sous-arbre opaque : waveform,
+//                    generateur de table...).
 //
-// post : (Tree original, Tree rebuilt) -> Tree, la regle bottom-up,
-//        appliquee exactement une fois par noeud visite, dans les deux
-//        chemins (garde ou reconstruction). 'original' reste disponible pour
-//        consulter les annotations de l'arbre source ; retourner 'rebuilt'
-//        signifie « pas de changement local ».
+// post : Tree -> Tree, la regle bottom-up — meme signature que la regle
+//        simple, appliquee une fois par noeud reconstruit par congruence
+//        (R2) seulement. Retourner l'argument signifie « pas de changement
+//        local ». Jamais appelee sur une garde qui coupe (R1) : voir plus
+//        bas pourquoi.
 template <class Pre, class Post>
 Tree treeRewrite(Tree root, Pre&& pre, Post&& post);
 template <class Pre, class Post>
@@ -353,33 +354,40 @@ Tree treeRewriteInPlace(Tree root, Pre&& pre, Post&& post);
 ```algorithm "treeRewriteMemo, variante gardee (cas ordinaire)"
 if t in memo then return memo[t] end
 if isRec(t, var, body) then ... identique a la variante simple ... end
-r <- pre(t)                       // decision top-down sur le noeud ORIGINAL
-if r = nullptr then
-  r <- reconstruction congruente depuis les enfants reecrits (R2)
+cut <- pre(t)                     // decision top-down sur le noeud ORIGINAL
+if cut has value then
+  return cut                      // R1 : post n'est pas appelee
 end
-result <- post(t, r)              // regle bottom-up : (original, reconstruit)
+r <- reconstruction congruente depuis les enfants reecrits (R2)
+result <- post(r)                 // regle bottom-up, uniquement sur R2
 memo[t] <- result
 return result
 ```
 
-La forme a une seule regle est le cas particulier `pre = \_ -> nullptr`,
-`post = \(_, r) -> rule(r)` — aucune rupture d'API, une simple surcharge.
+La forme a une seule regle est le cas particulier
+`pre = [](Tree) -> std::optional<Tree> { return std::nullopt; }`,
+`post = rule` — aucune rupture d'API, une simple surcharge, et `post` a
+desormais exactement la signature de la regle simple.
 
-Trois choix de conception :
+Deux choix de conception :
 
-- **`nullptr` comme sentinelle de `pre`** (et non « meme pointeur =
-  descendre ») : il faut *trois* issues — descendre, remplacer sans
-  descendre, garder sans descendre — et `Tree` etant un pointeur, `nullptr`
-  les distingue naturellement. La convention de `post` reste celle de la
-  regle simple (meme pointeur = pas de changement).
-- **`post` s'applique aussi au resultat d'une garde** : fidele au modele
-  `postprocess(transformation(t))` du `TreeTransform` historique de Faust,
-  et sans cout pour une regle qui ne s'y interesse pas.
-- **`original` dans `post` sert a lire, jamais a transferer** : les
-  annotations du terme source guident la decision ; les copier sur le terme
-  reconstruit serait incorrect (le reconstruit merite souvent un jugement
-  plus fin, et `fType` etant porte par des pointeurs hashconses partages, une
-  copie aveugle pourrait ecraser le type d'un noeud partage ailleurs).
+- **`std::optional<Tree>` plutot que `nullptr` comme sentinelle de `pre`** :
+  il faut *trois* issues — descendre, remplacer sans descendre, garder sans
+  descendre. Un `Tree` ne peut jamais valoir `nullptr` legitimement, donc la
+  sentinelle par pointeur n'etait pas ambigue ; le passage a `std::optional`
+  est un choix de clarte de type (l'intention « valeur optionnelle » est
+  dans la signature, pas dans une convention de pointeur), pas une
+  correction de bug.
+- **`post` ne s'applique qu'a la reconstruction congruente (R2), jamais a une
+  garde qui coupe (R1)** : une garde qui coupe est desormais opaque de bout
+  en bout. C'est la simplification cle par rapport a la premiere version
+  (qui appelait encore `post(original, cut)` apres une coupe) : si `pre` a
+  determine `c` a partir d'un jugement sur le terme source, il n'y a pas de
+  sens a laisser une regle structurelle generique retoucher `c` ensuite — R1
+  a deja tranche, et cette coherence n'a plus besoin que `post` connaisse
+  l'original, puisqu'il ne voit jamais le resultat d'une garde. `post`
+  redevient exactement la regle simple (meme signature, meme role),
+  utilisable telle quelle des deux cotes de la surcharge.
 
 ::: warning [Apres une reecriture gardee, les jugements sont perimes]
 Les annotations consultees par `pre` decrivent l'arbre d'ENTREE. L'arbre
@@ -473,12 +481,13 @@ Variante gardee (`checkGuardedRewrite`) :
       enfants (verifie en enregistrant les noeuds vus par `pre`) ;
 - [ ] `pre` retournant `t` = sous-arbre opaque, garde verbatim (meme
       pointeur) alors que `post` en aurait reecrit les feuilles ;
-- [ ] `post` recoit le noeud original a cote du reconstruit, et peut
-      consulter une annotation du premier pour decider du second ;
+- [ ] `post` n'est jamais appelee sur une garde qui coupe : la coupe est
+      opaque de bout en bout, seule la reconstruction congruente (R2) passe
+      par `post` ;
 - [ ] `pre` n'est jamais consultee sur un noeud `SYMREC`, et la variante
       in-place reste stable en pointeur sous la paire identite ;
 - [ ] equivalence exacte avec la forme a une regle
-      (`pre = nullptr`, `post` ignorant l'original).
+      (`pre` toujours `std::nullopt`, `post = rule`).
 
 ## Benchmarks attendus
 

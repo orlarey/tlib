@@ -7,6 +7,7 @@
 #ifndef __REWRITE__
 #define __REWRITE__
 
+#include <optional>
 #include <unordered_map>
 
 #include "symbol.hh"
@@ -36,6 +37,33 @@
  * treeRewriteInPlace() reuses the same variable : rec(var, newBody) updates
  * RECDEF on the shared SYMREC(var) node. Destructive on the old tree, but
  * pointer-stable : treeRewriteInPlace(t, identity) == t.
+ *
+ * Rule view, for a node f(t1,...,tn) which is not a SYMREC :
+ *
+ *   rule |- ti => ui for every i
+ *   ------------------------------------------------------------ (rewrite)
+ *   rule |- f(t1,...,tn) => rule⟦ f(u1,...,un) ⟧
+ *
+ * In other words, treeRewrite(root, rule) is the usual bottom-up
+ * congruence closure followed by one local rewrite rule on the rebuilt
+ * node. rule⟦x⟧ denotes the C++ call rule(x). The memo makes this a DAG
+ * rewrite : the judgment t => u is computed once per Tree pointer and then
+ * reused.
+ *
+ * For a recursive definition, treeRewrite is alpha-renaming :
+ *
+ *   body[var := var'] => body'
+ *   ------------------------------- (rec-copy)
+ *   rec(var, body) => rec(var', body')
+ *
+ * while treeRewriteInPlace keeps the recursive variable :
+ *
+ *   body => body'
+ *   ------------------------------- (rec-in-place)
+ *   rec(var, body) => rec(var, body')
+ *
+ * In both cases, the memo is initialized before descending into body so that
+ * recursive references to the definition have a target during the traversal.
  */
 
 template <class Rule>
@@ -150,23 +178,36 @@ Tree treeRewriteInPlace(Tree root, Rule&& rule)
  * therefore be tried BEFORE the congruence descent (R2), on the original
  * node. This priority is part of the semantics, not an optimization.
  *
- * pre : Tree -> Tree, called top-down on each original node (never on a
- * SYMREC node, which the traversal handles itself) :
- *   - returns nullptr : no decision here, descend into children as usual;
- *   - returns r       : the whole subtree becomes r, children are never
- *                       visited. r == t expresses "keep this node verbatim,
- *                       don't enter it" (an opaque subtree).
+ * Rule view, for a node t = f(t1,...,tn) which is not a SYMREC :
  *
- * post : (Tree original, Tree rebuilt) -> Tree, the bottom-up rule, applied
- * exactly once per visited node, in both paths (guarded or rebuilt).
- * 'rebuilt' has already-rewritten children; 'original' is the node it came
- * from (same pointer when nothing changed below), kept available so the rule
- * can consult annotations attached to the original tree. Returning 'rebuilt'
- * means "no local change".
+ *   pre⟦t⟧ = some(c)
+ *   ----------------------- (guard-cut)
+ *   pre,post |- t => c
+ *
+ *   pre⟦t⟧ = none
+ *   pre,post |- ti => ui for every i
+ *   --------------------------------------------------- (guard-congruence)
+ *   pre,post |- t => post⟦ f(u1,...,un) ⟧
+ *
+ * Here pre⟦t⟧ and post⟦r⟧ denote the C++ calls pre(t) and post(r).
+ * Therefore 'pre' decides whether the original subtree is opaque/replaced;
+ * when it fires, children are not visited and 'post' is not applied to the
+ * replacement. 'post' only handles nodes rebuilt by congruence.
+ *
+ * pre : Tree -> std::optional<Tree>, called top-down on each original node
+ * (never on a SYMREC node, which the traversal handles itself) :
+ *   - returns std::nullopt : no decision here, descend into children as usual;
+ *   - returns r            : the whole subtree becomes r, children are never
+ *                            visited. r == t expresses "keep this node
+ *                            verbatim, don't enter it" (an opaque subtree).
+ *
+ * post : Tree -> Tree, the bottom-up rule, applied exactly once after
+ * congruence descent. Its argument has already-rewritten children. Returning
+ * that argument means "no local change".
  *
  * The single-rule treeRewrite(root, rule) is exactly equivalent to
- * treeRewrite(root, [](Tree){ return nullptr; },
- *                   [](Tree, Tree r){ return rule(r); }).
+ * treeRewrite(root, [](Tree) -> std::optional<Tree> { return std::nullopt; },
+ *                   [](Tree r){ return rule(r); }).
  *
  * Caveat : after a guarded rewrite, the judgments consulted by 'pre' are
  * stale for the RESULT tree (new nodes carry no annotation). Recomputing
@@ -193,9 +234,12 @@ Tree treeRewriteMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tree, Tree
     }
 
     Tree r;
-    if (Tree cut = pre(t)) {
+    std::optional<Tree> cut = pre(t);
+    if (cut.has_value()) {
+        TLIB_ASSERT(*cut != nullptr);
         // guard fired : whole subtree decided here, children never visited
-        r = cut;
+        memo[t] = *cut;
+        return *cut;
     } else {
         int ar = t->arity();
         r      = t;
@@ -211,7 +255,7 @@ Tree treeRewriteMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tree, Tree
             }
         }
     }
-    Tree result = post(t, r);
+    Tree result = post(r);
     memo[t]     = result;
     return result;
 }
@@ -241,8 +285,11 @@ Tree treeRewriteInPlaceMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tre
     }
 
     Tree r;
-    if (Tree cut = pre(t)) {
-        r = cut;
+    std::optional<Tree> cut = pre(t);
+    if (cut.has_value()) {
+        TLIB_ASSERT(*cut != nullptr);
+        memo[t] = *cut;
+        return *cut;
     } else {
         int ar = t->arity();
         r      = t;
@@ -258,7 +305,7 @@ Tree treeRewriteInPlaceMemo(Tree t, Pre& pre, Post& post, std::unordered_map<Tre
             }
         }
     }
-    Tree result = post(t, r);
+    Tree result = post(r);
     memo[t]     = result;
     return result;
 }
