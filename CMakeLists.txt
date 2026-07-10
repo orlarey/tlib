@@ -43,6 +43,10 @@ add_test(NAME tlib-tests COMMAND tlib-tests)
 # the benchmark executable
 add_executable(tlib-benchmark benchmark.cpp)
 target_link_libraries(tlib-benchmark PRIVATE tlib)
+# $<CONFIG> (not CMAKE_BUILD_TYPE) so this also works with multi-config
+# generators (Xcode, Visual Studio) ; empty on a single-config generator
+# with no build type set, which the benchmark reports as a visible warning.
+target_compile_definitions(tlib-benchmark PRIVATE TLIB_BUILD_TYPE="$<CONFIG>")
 
 # recursive tree conversion demo
 add_executable(tlib-recursive-demo recursive-demo.cpp)

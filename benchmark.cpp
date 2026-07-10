@@ -23,14 +23,20 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/utsname.h>
+#endif
 
 #include "occur.hh"
 #include "tlib.hh"
@@ -723,6 +729,118 @@ static void benchRecursiveTrees(int scale, int runs)
     });
 }
 
+//------------------------------------------------------------------------------
+// Run conditions : timings are only comparable across runs sharing these.
+// A ~3-4x regression once traced back to a reconfigured build directory that
+// silently lost -O3 (empty CMAKE_BUILD_TYPE) ; this header makes that visible
+// in every benchmark output instead of requiring a diff against reference-perf.
+//------------------------------------------------------------------------------
+
+static std::string currentDateTime()
+{
+    std::time_t now = std::time(nullptr);
+    char        buf[32];
+    std::strftime(buf, sizeof buf, "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    return buf;
+}
+
+static std::string buildType()
+{
+#ifdef TLIB_BUILD_TYPE
+    std::string t = TLIB_BUILD_TYPE;
+    return t.empty() ? "(unspecified)" : t;
+#else
+    return "(unknown)";
+#endif
+}
+
+static bool isOptimizedBuildType(const std::string& type)
+{
+    return type == "Release" || type == "RelWithDebInfo" || type == "MinSizeRel";
+}
+
+static std::string compilerInfo()
+{
+#if defined(__clang__)
+    return std::string("clang ") + __clang_version__;
+#elif defined(__GNUC__)
+    return std::string("gcc ") + __VERSION__;
+#elif defined(_MSC_VER)
+    return "MSVC " + std::to_string(_MSC_VER);
+#else
+    return "unknown compiler";
+#endif
+}
+
+static std::string platformInfo()
+{
+#if defined(__APPLE__) || defined(__linux__)
+    struct utsname u;
+    if (uname(&u) == 0) {
+        return std::string(u.sysname) + " " + u.release + " (" + u.machine + ")";
+    }
+#endif
+    return "unknown platform";
+}
+
+// Best-effort AC/battery detection ; diagnostic only, never affects a return
+// code. macOS via `pmset`, Linux via /sys/class/power_supply, else "unknown"
+// (e.g. Windows, or a desktop with no battery).
+static std::string powerSource()
+{
+#if defined(__APPLE__)
+    if (FILE* p = popen("pmset -g batt 2>/dev/null", "r")) {
+        char        line[256];
+        std::string out;
+        while (fgets(line, sizeof line, p)) {
+            out += line;
+        }
+        pclose(p);
+        if (out.find("AC Power") != std::string::npos) return "AC power";
+        if (out.find("Battery Power") != std::string::npos) return "battery";
+    }
+    return "unknown";
+#elif defined(__linux__)
+    const char* candidates[] = {"/sys/class/power_supply/AC/online",
+                                 "/sys/class/power_supply/ACAD/online",
+                                 "/sys/class/power_supply/ADP1/online"};
+    for (const char* path : candidates) {
+        if (FILE* f = std::fopen(path, "r")) {
+            char c    = std::fgetc(f);
+            bool onAc = (c == '1');
+            std::fclose(f);
+            return onAc ? "AC power" : "battery";
+        }
+    }
+    return "unknown";
+#else
+    return "unknown";
+#endif
+}
+
+static void printRunConditions()
+{
+    std::string type = buildType();
+    std::cout << "run conditions\n";
+    std::cout << "  date        : " << currentDateTime() << "\n";
+    std::cout << "  build type  : " << type;
+    if (!isOptimizedBuildType(type)) {
+        std::cout << "   *** NOT an optimized build : timings are meaningless"
+                      " next to a Release run ***";
+    }
+    std::cout << "\n";
+    std::cout << "  compiler    : " << compilerInfo() << "\n";
+    std::cout << "  assertions  : "
+#ifdef NDEBUG
+              << "disabled (NDEBUG)"
+#else
+              << "enabled (NDEBUG not defined)"
+#endif
+              << "\n";
+    std::cout << "  platform    : " << platformInfo() << "\n";
+    std::cout << "  power       : " << powerSource() << "\n";
+}
+
 int main(int argc, const char* argv[])
 {
     tlib::init();
@@ -756,6 +874,8 @@ int main(int argc, const char* argv[])
 
     std::cout << "tlib performance scenarios (scale=" << scale << ", runs=" << runs
               << ", time=median)\n";
+    printRunConditions();
+    std::cout << std::string(82, '-') << "\n";
     std::cout << std::left << std::setw(30) << "case" << std::right << std::setw(14) << "work"
               << std::setw(12) << "median-ms" << std::setw(12) << "Mops/s"
               << "  note\n";
