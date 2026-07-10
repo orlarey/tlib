@@ -13,6 +13,7 @@
 
 #include "dcond.hh"
 #include "occur.hh"
+#include "recursive-print.hh"
 #include "tests.hh"
 #include "tlib.hh"
 
@@ -372,6 +373,47 @@ bool checkRecursiveTrees()
     Tree sharedRoot = tree(symbol("h"), ref(px), ref(py), ref(px));
     CHECK(toSymbolicString(sharedRoot) ==
           "h(x, y, x)\nwith {\n  x := f(x)\n  y := f(y)\n}");
+
+    // Custom recursive pretty-printer: recursion management is supplied by
+    // tlib while the caller remains responsible for ordinary node syntax.
+    Tree customInner = rec(py, tree(symbol("inner"), ref(px), ref(py)));
+    Tree customOuter = rec(px, tree(symbol("outer"), ref(px), customInner));
+    std::ostringstream customOut;
+    {
+        RecursivePrintSession session;
+        std::function<void(std::ostream&, Tree)> printNode;
+        printNode = [&printNode](std::ostream& out, Tree t) {
+            Tree var, body;
+            if (isRec(t, var, body)) {
+                RecursivePrintSession::reference(out, var, body);
+                return;
+            }
+            out << t->node();
+            if (t->arity() > 0) {
+                out << "[";
+                for (int i = 0; i < t->arity(); ++i) {
+                    if (i > 0) out << ";";
+                    printNode(out, t->branch(i));
+                }
+                out << "]";
+            }
+        };
+        printNode(customOut, customOuter);
+        session.finish(customOut, [&printNode](std::ostream& out, Tree, Tree body) {
+            printNode(out, body);
+        });
+    }
+    CHECK(customOut.str() ==
+          "x\nwith {\n  x := outer[x;y]\n  y := inner[x;y]\n}");
+
+    // A completed outer session must not leak definitions into the next one.
+    std::ostringstream isolatedOut;
+    {
+        RecursivePrintSession session;
+        isolatedOut << "plain";
+        session.finish(isolatedOut, [](std::ostream&, Tree, Tree) {});
+    }
+    CHECK(isolatedOut.str() == "plain");
 
     // nested recursion : ref(1) points to the inner rec, ref(2) to the outer rec
     Tree nested = rec(tree(symbol("outer"), ref(1), rec(tree(symbol("inner"), ref(1), ref(2)))));

@@ -30,6 +30,7 @@ add_library(tlib STATIC
     tlib/tree.cpp
     tlib/list.cpp
     tlib/recursive-tree.cpp
+    tlib/recursive-print.cpp
     tlib/dcond.cpp
     tlib/occur.cpp)
 
