@@ -56,6 +56,7 @@ int main()
 | `tlib/property.hh` | `property<P>` (unary) and `property2<Tree>` (binary) memoization |
 | `tlib/list.hh/.cpp` | lists, sets (canonical ordered lists), environments |
 | `tlib/recursive-tree.cpp` | `rec` / `ref`: de Bruijn and symbolic recursive trees |
+| `tlib/rewrite.hh` | `treeRewrite` / `treeRewriteInPlace`: bottom-up rewriting over shared and symbolic-recursive trees — see [REWRITE-SPEC.md](REWRITE-SPEC.md) |
 | `tlib/dcond.hh/.cpp` | boolean conditions in DNF/CNF (optional module) |
 | `tlib/occur.hh/.cpp` | subtree occurrence counting (optional module) |
 | `tlib/garbageable.hh/.cpp` | session memory model: allocate freely, free all at cleanup |

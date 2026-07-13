@@ -30,6 +30,16 @@ correcte vis-a-vis du partage et des recursions symboliques. Etat : les deux
 primitives sont implementees (`tlib/rewrite.hh`), testees (`checkRewrite`) et
 mesurees (section `[rewrites]` de benchmark.cpp).
 
+Ce document occupe l'etage intermediaire d'une pile documentaire. En
+dessous, le README decrit les invariants des arbres que la presente spec
+suppose acquis : hash-consing a partage maximal, recursion symbolique
+`SYMREC`/`RECDEF`, alpha-equivalence. Au-dessus, les deux non-objectifs
+« strategie fixe-point » et « calcul d'attributs dependant du contexte »
+sont couverts par une specification separee de calcul bottom-up
+d'attributs, developpee dans la bibliotheque `signals`, qui consomme la
+presente primitive pour sa loi de reconstruction et fournit en retour les
+jugements (types, intervalles) que consulte la variante gardee `pre`/`post`.
+
 ## Situation actuelle
 
 Il existe deja plusieurs formes de transformation :
