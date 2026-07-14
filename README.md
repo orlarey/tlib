@@ -52,7 +52,7 @@ int main()
 | `tlib/tlib.hh` | single entry point: aggregated API + `tlib::init/cleanup` lifecycle |
 | `tlib/tree.hh/.cpp` | `CTree`: hash-consing core, properties, aperture |
 | `tlib/node.hh/.cpp` | `Node`: tagged union int / int64 / double / symbol / pointer |
-| `tlib/symbol.hh/.cpp` | `Symbol`: interned symbol table, `unique()` fresh names |
+| `tlib/symbol.hh/.cpp` | `Symbol`: interned symbol table, `unique()` fresh names, optional `(Domain, Opcode)` constructor identity |
 | `tlib/property.hh` | `property<P>` (unary) and `property2<Tree>` (binary) memoization |
 | `tlib/list.hh/.cpp` | lists, sets (canonical ordered lists), environments |
 | `tlib/recursive-tree.cpp` | `rec` / `ref`: de Bruijn and symbolic recursive trees |
@@ -61,6 +61,84 @@ int main()
 | `tlib/occur.hh/.cpp` | subtree occurrence counting (optional module) |
 | `tlib/garbageable.hh/.cpp` | session memory model: allocate freely, free all at cleanup |
 | `tlib/tlib-error.hh/.cpp` | pluggable error handler (defaults to `std::runtime_error`) |
+
+## Constructor identities for algebraic folds
+
+Trees are a convenient representation of syntax, but compiler analyses do not
+all produce trees. A type analysis produces types, an interval analysis
+produces intervals, and an evaluator produces values. These interpretations
+can share one traversal expressed as an algebraic **fold**: recursively
+interpret the children, then apply the semantic operation corresponding to the
+constructor at the current node.
+
+```mermaid
+flowchart LR
+    T["hash-consed Tree"] --> D["consumer fold and dispatch"]
+    D --> S["syntax algebra: Tree"]
+    D --> Y["type algebra: Type"]
+    D --> I["interval algebra: Interval"]
+    D --> V["evaluation algebra: Value"]
+```
+
+For this fold to be both generic and efficient, a consumer must identify a
+constructor directly. Comparing symbol names or trying every historical
+`isXXX` predicate in sequence makes dispatch linear in the number of
+constructors and leaves no way to verify that the tree and the algebra belong
+to the same language. TLIB therefore lets an interned `Sym` carry an optional
+constructor identity:
+
+```cpp
+struct SymbolTag {
+    Sym           domain;
+    std::uint16_t opcode;
+};
+```
+
+`domain` identifies a constructor signature, such as a language of signal
+terms. `opcode` identifies one constructor inside that signature. The pair is
+stored once on the interned symbol, so every hash-consed tree using that symbol
+sees the same identity without adding fields to each `CTree`. A fold can first
+check that the node domain is the one accepted by its algebra, then dispatch on
+the opcode in constant time.
+
+TLIB deliberately provides only this generic identity mechanism. It knows
+nothing about Faust signals, type systems, intervals, or any particular
+algebra. Client libraries define their own domains and opcode enumerations;
+their folds decide how atoms, branches, lists and recursive bindings are
+interpreted.
+
+### API and invariants
+
+```cpp
+Sym signalDomain = symbol("Faust.Signal");
+Sym addConstructor = symbol("SIGADD");
+
+registerSymbolTag(addConstructor, signalDomain, 17);
+
+SymbolTag tag;
+if (getSymbolTag(addConstructor, tag)) {
+    assert(tag.domain == signalDomain);
+    assert(tag.opcode == 17);
+}
+```
+
+The API enforces the following invariants:
+
+- tagging is optional; ordinary symbols remain untagged;
+- a null domain is not a valid constructor identity;
+- registering the same `(Domain, Opcode)` more than once is a no-op, allowing
+  independent initialization paths to declare the same constructor safely;
+- registering a different domain or opcode on an already tagged symbol is an
+  error, and the original identity is preserved;
+- `getSymbolTag()` returns `false` for an untagged symbol and leaves its output
+  argument unchanged;
+- the tag is distinct from `getUserData()`/`setUserData()`, whose storage and
+  behavior remain available to existing clients.
+
+The mechanism is compatible with existing source code: creating, comparing
+and printing symbols is unchanged. It is the first infrastructure step toward
+generic folds; the domain definitions, opcode tables and dispatchers belong to
+the libraries that define the corresponding tree languages.
 
 ## Design notes
 
@@ -193,10 +271,11 @@ include path and link against it. Requires C++17, no external dependencies.
 
 Detached from `compiler/tlib` in the Faust compiler (Y. Orlarey, GRAME,
 2002-2026), following the same approach as
-[DirectedGraph](https://github.com/orlarey/DirectedGraph). Compared to the
-in-compiler version, the only changes are the removal of the compiler-global
-couplings (symbols and tuning flags now owned by the library, pluggable error
-handling) — the data structures and algorithms are identical.
+[DirectedGraph](https://github.com/orlarey/DirectedGraph). The standalone
+repository removes compiler-global couplings and also serves as the test bed
+for generic tree infrastructure, including recursive rewriting and symbol
+constructor identities. These evolutions remain independent of Faust-specific
+semantics so they can be tested here before synchronization with the compiler.
 
 ## License
 

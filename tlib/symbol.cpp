@@ -225,10 +225,12 @@ std::size_t Symbol::calcHashKey(const std::string& str)
 
 Symbol::Symbol(const string& str, size_t hsh, Sym nxt)
 {
-    fName = str;
-    fHash = hsh;
-    fNext = nxt;
-    fData = 0;
+    fName   = str;
+    fHash   = hsh;
+    fNext   = nxt;
+    fData   = nullptr;
+    fDomain = nullptr;
+    fOpcode = 0;
 }
 
 Symbol::~Symbol()
@@ -248,4 +250,66 @@ void Symbol::init()
     gHashTableSize = kInitialHashTableSize;
     gSymbolTable   = new Symbol*[gHashTableSize];
     memset(gSymbolTable, 0, sizeof(Sym) * gHashTableSize);
+}
+
+//--------------------------------------------------------------------------
+// Public API: optional domain/opcode tags
+//--------------------------------------------------------------------------
+
+/**
+ * Read the constructor tag registered on \p sym.
+ *
+ * Return true and copy the complete tag to \p tag when one is present.
+ * Return false without modifying \p tag when the symbol is untagged. A null
+ * symbol is invalid and is reported through the TLIB error handler.
+ */
+bool getSymbolTag(Sym sym, SymbolTag& tag)
+{
+    if (!sym) {
+        tlib::error("getSymbolTag: null symbol");
+    }
+    if (!sym->fDomain) {
+        return false;
+    }
+    tag = {sym->fDomain, sym->fOpcode};
+    return true;
+}
+
+/**
+ * Register \p sym as opcode \p opcode in \p domain.
+ *
+ * Repeating the same registration is a no-op, which lets independent
+ * initialization paths safely declare the same constructor. A null symbol, a
+ * null domain, or a conflicting registration is reported through the TLIB
+ * error handler; an existing tag is never overwritten. This storage is
+ * independent from getUserData()/setUserData().
+ */
+void registerSymbolTag(Sym sym, Sym domain, std::uint16_t opcode)
+{
+    if (!sym) {
+        tlib::error("registerSymbolTag: null symbol");
+    }
+    if (!domain) {
+        tlib::error("registerSymbolTag: null domain for symbol " + string(name(sym)));
+    }
+
+    // First registration establishes the immutable identity. Keeping the tag
+    // on the interned symbol makes every tree node using it see the same tag.
+    if (!sym->fDomain) {
+        sym->fDomain = domain;
+        sym->fOpcode = opcode;
+        return;
+    }
+
+    if (sym->fDomain != domain || sym->fOpcode != opcode) {
+        string message = "registerSymbolTag: conflicting tag for symbol ";
+        message += name(sym);
+        message += " (existing domain=";
+        message += name(sym->fDomain);
+        message += ", opcode=" + to_string(sym->fOpcode);
+        message += "; requested domain=";
+        message += name(domain);
+        message += ", opcode=" + to_string(opcode) + ")";
+        tlib::error(message);
+    }
 }

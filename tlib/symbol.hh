@@ -39,6 +39,7 @@
 #define __SYMBOL__
 
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -49,6 +50,18 @@
 
 class Symbol;
 typedef Symbol* Sym;
+
+/**
+ * Optional constructor identity attached to an interned symbol.
+ *
+ * The domain identifies a constructor signature and the opcode identifies one
+ * constructor within that signature. A null domain represents the absence of
+ * a tag and is never a valid registered domain.
+ */
+struct SymbolTag {
+    Sym           domain = nullptr;
+    std::uint16_t opcode = 0;
+};
 
 /**
  * Symbols are unique objects with a name stored in a hash table.
@@ -74,6 +87,8 @@ class Symbol : public Garbageable {
     std::size_t fHash;  ///< Hash key computed from the name and used to determine the hash table entry
     Sym         fNext;  ///< Next symbol in the hash table entry
     void*       fData;  ///< Field to user disposal to store additional data
+    Sym         fDomain;  ///< Optional signature domain, null while the symbol is untagged
+    std::uint16_t fOpcode;  ///< Constructor identity within fDomain; meaningful only when tagged
 
     // Constructors & destructors
     Symbol(const std::string&, std::size_t hsh,
@@ -102,6 +117,8 @@ class Symbol : public Garbageable {
 
     friend void* getUserData(Sym sym);
     friend void  setUserData(Sym sym, void* d);
+    friend bool  getSymbolTag(Sym sym, SymbolTag& tag);
+    friend void  registerSymbolTag(Sym sym, Sym domain, std::uint16_t opcode);
 
     static void init();
 
@@ -135,6 +152,30 @@ inline void setUserData(Sym sym, void* d)
 {
     sym->fData = d;
 }  ///< Set user data
+
+//--------------------------------------------------------------------------
+// Public API: optional domain/opcode tags
+//--------------------------------------------------------------------------
+
+/**
+ * Read the constructor tag registered on \p sym.
+ *
+ * Return true and copy the complete tag to \p tag when one is present.
+ * Return false without modifying \p tag when the symbol is untagged. A null
+ * symbol is invalid and is reported through the TLIB error handler.
+ */
+TLIB_API bool getSymbolTag(Sym sym, SymbolTag& tag);
+
+/**
+ * Register \p sym as opcode \p opcode in \p domain.
+ *
+ * Repeating the same registration is a no-op, which lets independent
+ * initialization paths safely declare the same constructor. A null symbol, a
+ * null domain, or a conflicting registration is reported through the TLIB
+ * error handler; an existing tag is never overwritten. This storage is
+ * independent from getUserData()/setUserData().
+ */
+TLIB_API void registerSymbolTag(Sym sym, Sym domain, std::uint16_t opcode);
 
 inline std::ostream& operator<<(std::ostream& s, const Symbol& n)
 {

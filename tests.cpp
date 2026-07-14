@@ -8,6 +8,7 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -51,6 +52,34 @@ bool checkSymbols()
     setUserData(symbol("foo"), &dummy);
     CHECK(getUserData(symbol("foo")) == &dummy);
     setUserData(symbol("foo"), nullptr);
+
+    // Constructor tags are optional and independent from the legacy user-data
+    // slot, so existing clients pay no semantic cost when they do not use them.
+    Sym       domain      = symbol("test-domain");
+    Sym       constructor = symbol("test-constructor");
+    SymbolTag tag {symbol("untouched-domain"), 99};
+    CHECK(!getSymbolTag(constructor, tag));
+    CHECK(tag.domain == symbol("untouched-domain") && tag.opcode == 99);
+
+    int taggedData = 17;
+    setUserData(constructor, &taggedData);
+    registerSymbolTag(constructor, domain, 7);
+    CHECK(getSymbolTag(constructor, tag));
+    CHECK(tag.domain == domain && tag.opcode == 7);
+    CHECK(getUserData(constructor) == &taggedData);
+
+    // Repeating the declaration is safe, but a contradictory declaration must
+    // fail without corrupting the constructor identity established first.
+    registerSymbolTag(constructor, domain, 7);
+    bool conflictRejected = false;
+    try {
+        registerSymbolTag(constructor, domain, 8);
+    } catch (const std::runtime_error&) {
+        conflictRejected = true;
+    }
+    CHECK(conflictRejected);
+    CHECK(getSymbolTag(constructor, tag));
+    CHECK(tag.domain == domain && tag.opcode == 7);
 
     return ok;
 }
