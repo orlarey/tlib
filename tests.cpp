@@ -53,33 +53,225 @@ bool checkSymbols()
     CHECK(getUserData(symbol("foo")) == &dummy);
     setUserData(symbol("foo"), nullptr);
 
-    // Constructor tags are optional and independent from the legacy user-data
-    // slot, so existing clients pay no semantic cost when they do not use them.
-    Sym       domain      = symbol("test-domain");
-    Sym       constructor = symbol("test-constructor");
-    SymbolTag tag {symbol("untouched-domain"), 99};
-    CHECK(!getSymbolTag(constructor, tag));
-    CHECK(tag.domain == symbol("untouched-domain") && tag.opcode == 99);
+    // Ordinary symbols remain compatible and unsigned. A failed lookup leaves
+    // its output untouched so callers can distinguish absence without a
+    // sentinel opcode, since zero is valid for the first constructor.
+    Sym       ordinary = symbol("ordinary-symbol");
+    SymbolTag tag {symbol("untouched-signature"), 99};
+    CHECK(!getSymbolTag(ordinary, tag));
+    CHECK(tag.signature == symbol("untouched-signature") && tag.opcode == 99);
 
+    // checkSymbols is the first test of a fresh session, so these first three
+    // signatures also verify base(S_i) = 256 * i in creation order.
+    auto signal     = signature("TestSignal");
+    auto sameSignal = signature("TestSignal");
+    CHECK(signal.identity() == sameSignal.identity());
+
+    Sym input = signal.add("TestSigInput");
+    CHECK(signal.add("TestSigInput") == input);  // idempotent, consumes no opcode
+    Sym delay1 = sameSignal.add("TestSigDelay1");
+    Sym delay  = signal.add("TestSigDelay");
+
+    SymbolTag inputTag;
+    SymbolTag delay1Tag;
+    SymbolTag delayTag;
+    CHECK(getSymbolTag(input, inputTag));
+    CHECK(getSymbolTag(delay1, delay1Tag));
+    CHECK(getSymbolTag(delay, delayTag));
+    CHECK(inputTag.signature == signal.identity());
+    CHECK(kOpcodesPerSignature == 256);
+    CHECK(inputTag.opcode == 0);
+    CHECK(inputTag.localOpcode() == 0);
+    CHECK(delay1Tag.localOpcode() == 1);
+    CHECK(delayTag.localOpcode() == 2);
+    CHECK(delay1Tag.opcode == inputTag.opcode + 1);
+    CHECK(delayTag.opcode == inputTag.opcode + 2);
+
+    // Signature metadata uses dedicated fields and therefore never consumes
+    // or changes the legacy user-data slot.
     int taggedData = 17;
-    setUserData(constructor, &taggedData);
-    registerSymbolTag(constructor, domain, 7);
-    CHECK(getSymbolTag(constructor, tag));
-    CHECK(tag.domain == domain && tag.opcode == 7);
-    CHECK(getUserData(constructor) == &taggedData);
+    setUserData(input, &taggedData);
+    CHECK(getUserData(input) == &taggedData);
+    CHECK(getSymbolTag(input, tag));
+    CHECK(tag.signature == signal.identity() && tag.opcode == inputTag.opcode);
 
-    // Repeating the declaration is safe, but a contradictory declaration must
-    // fail without corrupting the constructor identity established first.
-    registerSymbolTag(constructor, domain, 7);
+    // Distinct signatures reserve disjoint ranges. A symbol cannot move from
+    // one signature to another, and rejection preserves its original tag.
+    auto other      = signature("TestOther");
+    Sym  otherFirst = other.add("TestOtherFirst");
+    SymbolTag otherTag;
+    CHECK(getSymbolTag(otherFirst, otherTag));
+    CHECK(otherTag.signature == other.identity());
+    CHECK(otherTag.opcode == 256);
+    CHECK(otherTag.localOpcode() == 0);
+    CHECK(otherTag.opcode - otherTag.localOpcode() !=
+          inputTag.opcode - inputTag.localOpcode());
+
     bool conflictRejected = false;
     try {
-        registerSymbolTag(constructor, domain, 8);
+        other.add("TestSigInput");
     } catch (const std::runtime_error&) {
         conflictRejected = true;
     }
     CHECK(conflictRejected);
-    CHECK(getSymbolTag(constructor, tag));
-    CHECK(tag.domain == domain && tag.opcode == 7);
+    CHECK(getSymbolTag(input, tag));
+    CHECK(tag.signature == signal.identity() && tag.opcode == inputTag.opcode);
+
+    // Signature identities share the historical symbol namespace. Reusing an
+    // ordinary symbol as an identity, or using that identity as a constructor,
+    // is safe because these two roles are stored independently.
+    Sym preexistingIdentity = symbol("TestPreexistingSignature");
+    auto preexistingSignature = signature("TestPreexistingSignature");
+    CHECK(preexistingSignature.identity() == preexistingIdentity);
+    CHECK(signal.add("TestPreexistingSignature") == preexistingIdentity);
+    Sym preexistingMember = preexistingSignature.add("TestPreexistingMember");
+    CHECK(preexistingMember == symbol("TestPreexistingMember"));
+    CHECK(getSymbolTag(preexistingIdentity, tag));
+    CHECK(tag.signature == signal.identity() && tag.localOpcode() == 3);
+    CHECK(getSymbolTag(preexistingMember, tag));
+    CHECK(tag.signature == preexistingSignature.identity());
+    CHECK(tag.opcode == 512 && tag.localOpcode() == 0);
+
+    // Capacity is exactly one complete byte of local opcodes. The 257th name
+    // is rejected, while an idempotent lookup still succeeds after saturation.
+    auto full = signature("TestFullSignature");
+    Sym  firstFull = nullptr;
+    Sym  lastFull  = nullptr;
+    for (int i = 0; i < 256; ++i) {
+        Sym constructor = full.add("TestFullConstructor" + std::to_string(i));
+        firstFull       = firstFull ? firstFull : constructor;
+        lastFull        = constructor;
+    }
+    SymbolTag firstFullTag;
+    SymbolTag lastFullTag;
+    CHECK(getSymbolTag(firstFull, firstFullTag));
+    CHECK(getSymbolTag(lastFull, lastFullTag));
+    CHECK(firstFullTag.localOpcode() == 0);
+    CHECK(lastFullTag.localOpcode() == 255);
+    CHECK(lastFullTag.opcode == firstFullTag.opcode + 255);
+    CHECK(full.add("TestFullConstructor255") == lastFull);
+
+    bool capacityRejected = false;
+    try {
+        full.add("TestFullConstructor256");
+    } catch (const std::runtime_error&) {
+        capacityRejected = true;
+    }
+    CHECK(capacityRejected);
+    CHECK(!getSymbolTag(symbol("TestFullConstructor256"), tag));
+
+    return ok;
+}
+
+//-----------------------------------------------------------------------------
+// Arithmetic signature : executable version of SIGNATURE-SPEC.md
+//-----------------------------------------------------------------------------
+
+namespace {
+
+// One algebraic interface fixes the operation names and arities while T
+// selects the carrier in which the arithmetic signature is interpreted.
+template <typename T>
+class ArithmeticAlgebra {
+   public:
+    using Value = T;
+
+    virtual ~ArithmeticAlgebra() = default;
+
+    virtual T Number(double x)     = 0;
+    virtual T Add(T x, T y)        = 0;
+    virtual T Sub(T x, T y)        = 0;
+    virtual T Mul(T x, T y)        = 0;
+    virtual T Div(T x, T y)        = 0;
+};
+
+// The primitive algebra owns the registered constructors and builds free
+// hash-consed terms. Its fold is the morphism from those terms to any other
+// ArithmeticAlgebra carrier.
+class ArithmeticTreeAlgebra : public ArithmeticAlgebra<Tree> {
+   private:
+    Signature fSignature = signature("Arithmetic");
+    Sym       fAdd       = fSignature.add("Arithmetic.Add");
+    Sym       fSub       = fSignature.add("Arithmetic.Sub");
+    Sym       fMul       = fSignature.add("Arithmetic.Mul");
+    Sym       fDiv       = fSignature.add("Arithmetic.Div");
+
+   public:
+    Tree Number(double x) override { return tree(x); }
+    Tree Add(Tree x, Tree y) override { return tree(fAdd, x, y); }
+    Tree Sub(Tree x, Tree y) override { return tree(fSub, x, y); }
+    Tree Mul(Tree x, Tree y) override { return tree(fMul, x, y); }
+    Tree Div(Tree x, Tree y) override { return tree(fDiv, x, y); }
+
+    /**
+     * Interpret a valid primitive arithmetic term in \p algebra.
+     *
+     * Numeric atoms are injected directly; binary nodes are checked against
+     * this signature, folded bottom-up, then dispatched by dense local opcode.
+     */
+    template <typename Algebra>
+    typename Algebra::Value fold(Tree expression, Algebra& algebra) const
+    {
+        double number;
+        if (isDouble(expression->node(), &number)) {
+            return algebra.Number(number);
+        }
+
+        Sym       constructor;
+        SymbolTag tag;
+        if (!isSym(expression->node(), &constructor) || !getSymbolTag(constructor, tag) ||
+            tag.signature != fSignature.identity() || expression->arity() != 2) {
+            tlib::error("invalid arithmetic expression");
+        }
+
+        auto x = fold(expression->branch(0), algebra);
+        auto y = fold(expression->branch(1), algebra);
+
+        switch (tag.localOpcode()) {
+            case 0: return algebra.Add(x, y);
+            case 1: return algebra.Sub(x, y);
+            case 2: return algebra.Mul(x, y);
+            case 3: return algebra.Div(x, y);
+            default: tlib::error("unknown arithmetic opcode");
+        }
+    }
+};
+
+// This second algebra gives the same operations their usual numeric meaning,
+// demonstrating that the fold changes interpretation without changing syntax.
+class ArithmeticEvalAlgebra : public ArithmeticAlgebra<double> {
+   public:
+    double Number(double x) override { return x; }
+    double Add(double x, double y) override { return x + y; }
+    double Sub(double x, double y) override { return x - y; }
+    double Mul(double x, double y) override { return x * y; }
+    double Div(double x, double y) override { return x / y; }
+};
+
+}  // namespace
+
+bool checkArithmeticSignatureFold()
+{
+    bool ok = true;
+
+    ArithmeticTreeAlgebra syntax;
+    ArithmeticEvalAlgebra evaluation;
+
+    // This is the exact example from the specification: the primitive algebra
+    // reconstructs the same hash-consed term, while the numeric algebra yields 20.
+    Tree expression =
+        syntax.Mul(syntax.Add(syntax.Number(2), syntax.Number(3)), syntax.Number(4));
+    CHECK(syntax.fold(expression, syntax) == expression);
+    CHECK(syntax.fold(expression, evaluation) == 20);
+
+    // Exercise the two remaining constructors so every registered opcode is
+    // covered by both reconstruction and evaluation.
+    Tree allOperations = syntax.Div(
+        syntax.Mul(syntax.Add(syntax.Number(2), syntax.Number(3)),
+                   syntax.Sub(syntax.Number(10), syntax.Number(2))),
+        syntax.Number(2));
+    CHECK(syntax.fold(allOperations, syntax) == allOperations);
+    CHECK(syntax.fold(allOperations, evaluation) == 20);
 
     return ok;
 }
@@ -767,6 +959,14 @@ bool checkLifecycle()
     CHECK(after->arity() == 2);
     CHECK(isClosed(rec(tree(symbol("f"), ref(1)))));
     CHECK(len(list2(tree(1), tree(2))) == 2);
+
+    // Signature ranges are session state as well: cleanup discards the old
+    // registry and the first new signature starts again at global opcode zero.
+    auto freshSignature = signature("LifecycleSignature");
+    Sym  freshConstructor = freshSignature.add("LifecycleConstructor");
+    SymbolTag freshTag;
+    CHECK(getSymbolTag(freshConstructor, freshTag));
+    CHECK(freshTag.signature == freshSignature.identity() && freshTag.opcode == 0);
 
     return ok;
 }

@@ -52,7 +52,7 @@ int main()
 | `tlib/tlib.hh` | single entry point: aggregated API + `tlib::init/cleanup` lifecycle |
 | `tlib/tree.hh/.cpp` | `CTree`: hash-consing core, properties, aperture |
 | `tlib/node.hh/.cpp` | `Node`: tagged union int / int64 / double / symbol / pointer |
-| `tlib/symbol.hh/.cpp` | `Symbol`: interned symbol table, `unique()` fresh names, optional `(Domain, Opcode)` constructor identity |
+| `tlib/symbol.hh/.cpp` | interned symbols and `Signature`: dense, disjoint constructor opcodes — see [SIGNATURE-SPEC.md](SIGNATURE-SPEC.md) |
 | `tlib/property.hh` | `property<P>` (unary) and `property2<Tree>` (binary) memoization |
 | `tlib/list.hh/.cpp` | lists, sets (canonical ordered lists), environments |
 | `tlib/recursive-tree.cpp` | `rec` / `ref`: de Bruijn and symbolic recursive trees |
@@ -84,61 +84,72 @@ For this fold to be both generic and efficient, a consumer must identify a
 constructor directly. Comparing symbol names or trying every historical
 `isXXX` predicate in sequence makes dispatch linear in the number of
 constructors and leaves no way to verify that the tree and the algebra belong
-to the same language. TLIB therefore lets an interned `Sym` carry an optional
-constructor identity:
+to the same language. TLIB therefore groups constructor symbols in interned
+signatures:
 
 ```cpp
+using SymbolOpcode = std::uint32_t;
+inline constexpr SymbolOpcode kOpcodesPerSignature = 256;
+
 struct SymbolTag {
-    Sym           domain;
-    std::uint16_t opcode;
+    Sym          signature;
+    SymbolOpcode opcode;
+
+    constexpr std::uint8_t localOpcode() const noexcept;
 };
 ```
 
-`domain` identifies a constructor signature, such as a language of signal
-terms. `opcode` identifies one constructor inside that signature. The pair is
-stored once on the interned symbol, so every hash-consed tree using that symbol
-sees the same identity without adding fields to each `CTree`. A fold can first
-check that the node domain is the one accepted by its algebra, then dispatch on
-the opcode in constant time.
+Each signature reserves one aligned range of 256 global opcodes, then assigns
+its constructors dense local positions from 0 to 255. The signature identity
+and global opcode are stored once on the interned symbol, so every hash-consed
+tree using that symbol sees the same identity without adding fields to each
+`CTree`. A fold checks that the signature is accepted by its algebra, then
+dispatches in constant time with `tag.localOpcode()`.
 
 TLIB deliberately provides only this generic identity mechanism. It knows
 nothing about Faust signals, type systems, intervals, or any particular
-algebra. Client libraries define their own domains and opcode enumerations;
+algebra. Client libraries define their signatures and algebra interfaces;
 their folds decide how atoms, branches, lists and recursive bindings are
 interpreted.
 
 ### API and invariants
 
 ```cpp
-Sym signalDomain = symbol("Faust.Signal");
-Sym addConstructor = symbol("SIGADD");
+auto signal = signature("Signal");
 
-registerSymbolTag(addConstructor, signalDomain, 17);
+Sym input  = signal.add("SigInput");
+Sym delay1 = signal.add("SigDelay1");
+Sym delay  = signal.add("SigDelay");
+Sym binop  = signal.add("SigBinOp");
 
 SymbolTag tag;
-if (getSymbolTag(addConstructor, tag)) {
-    assert(tag.domain == signalDomain);
-    assert(tag.opcode == 17);
+if (getSymbolTag(input, tag)) {
+    assert(tag.signature == signal.identity());
+    assert(tag.localOpcode() == 0);
 }
 ```
 
 The API enforces the following invariants:
 
-- tagging is optional; ordinary symbols remain untagged;
-- a null domain is not a valid constructor identity;
-- registering the same `(Domain, Opcode)` more than once is a no-op, allowing
-  independent initialization paths to declare the same constructor safely;
-- registering a different domain or opcode on an already tagged symbol is an
-  error, and the original identity is preserved;
-- `getSymbolTag()` returns `false` for an untagged symbol and leaves its output
+- signing is optional; ordinary symbols remain unsigned;
+- two signatures reserve disjoint 256-opcode ranges;
+- first additions allocate a dense local sequence and the 257th distinct
+  constructor is rejected;
+- adding the same name again is a no-op and returns the same `Sym`;
+- adding a symbol owned by another signature is an error, and the original
+  identity is preserved;
+- `getSymbolTag()` returns `false` for an unsigned symbol and leaves its output
   argument unchanged;
 - the tag is distinct from `getUserData()`/`setUserData()`, whose storage and
   behavior remain available to existing clients.
 
 The mechanism is compatible with existing source code: creating, comparing
 and printing symbols is unchanged. It is the first infrastructure step toward
-generic folds; the domain definitions, opcode tables and dispatchers belong to
-the libraries that define the corresponding tree languages.
+generic folds; concrete signatures, algebra interfaces and dispatchers belong
+to the libraries that define the corresponding tree languages. Opcodes are
+session-local dispatch identities, not persistent values to serialize. The
+complete contract and an arithmetic fold example are in
+[SIGNATURE-SPEC.md](SIGNATURE-SPEC.md).
 
 ## Design notes
 

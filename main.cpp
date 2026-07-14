@@ -18,6 +18,7 @@ int main(int, const char**)
     bool r = true;
 
     r &= checkSymbols();
+    r &= checkArithmeticSignatureFold();
     r &= checkNodes();
     r &= checkHashConsing();
     r &= checkAccessors();

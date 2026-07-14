@@ -7,6 +7,7 @@
 #pragma once
 
 bool checkSymbols();
+bool checkArithmeticSignatureFold();
 bool checkNodes();
 bool checkHashConsing();
 bool checkAccessors();
