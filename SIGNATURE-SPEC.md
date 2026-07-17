@@ -70,8 +70,7 @@ Fold
     récursivement les branches, puis applique l’opération de 𝒜 correspondant
     au constructeur du nœud[^fold].
 
-[^fold]: Le terme vient de la programmation fonctionnelle : c’est le *fold*
-    des listes généralisé aux arbres, aussi appelé catamorphisme.
+[^fold]: Le terme vient de la programmation fonctionnelle : c’est le *fold* des listes généralisé aux arbres, aussi appelé catamorphisme.
 
 ```math
 ⟦c(t₁, …, tₙ)⟧_𝒜 = c_𝒜(⟦t₁⟧_𝒜, …, ⟦tₙ⟧_𝒜)
