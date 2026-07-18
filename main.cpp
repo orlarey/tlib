@@ -28,7 +28,7 @@ int main(int, const char**)
     r &= checkLists();
     r &= checkSets();
     r &= checkEnvironments();
-    r &= checkRecursiveTrees();
+    r &= checkRecursiveTrees() && checkMutualRecursion();
     r &= checkRewrite();
     r &= checkGuardedRewrite();
     r &= checkDnfCnf();

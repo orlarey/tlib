@@ -675,6 +675,52 @@ bool checkRecursiveTrees()
 // Bottom-up rewriting (treeRewrite / treeRewriteInPlace, see REWRITE-SPEC.md)
 //-----------------------------------------------------------------------------
 
+bool checkMutualRecursion()
+{
+    bool ok = true;
+
+    // Two mutually recursive singletons A = f(B, A), B = g(A) referencing a
+    // shared closed subtree, plus an independent lower component C = h(C)
+    // used by both. Exercises the component-based sym2deBruijn: C converts
+    // once (closed memo), A and B inline each other (same component).
+    Tree c  = tree(unique("C"));
+    Tree rc = rec(c, tree(symbol("h"), ref(c)));
+
+    Tree shared = tree(symbol("s"), rc);  // closed subtree shared by A and B
+
+    Tree a = tree(unique("A"));
+    Tree b = tree(unique("B"));
+    // build the mutual knot: refs first, definitions attached afterwards
+    Tree ra = rec(a, tree(symbol("f"), ref(b), ref(a), shared));
+    Tree rb = rec(b, tree(symbol("g"), ref(a), shared));
+
+    Tree root = tree(symbol("top"), ra, rb, shared);
+
+    // conversion terminates and the result is closed
+    Tree d = sym2deBruijn(root);
+    CHECK(isClosed(d));
+
+    // deterministic and idempotent through the round-trip: the de Bruijn
+    // form is canonical, so converting the round-tripped symbolic form
+    // gives the same hash-consed tree
+    Tree s2 = deBruijn2Sym(d);
+    CHECK(sym2deBruijn(s2) == d);
+
+    // alpha-equivalence: same knot built with fresh variable names
+    Tree c2  = tree(unique("C"));
+    Tree rc2 = rec(c2, tree(symbol("h"), ref(c2)));
+    Tree shared2 = tree(symbol("s"), rc2);
+    Tree a2 = tree(unique("A"));
+    Tree b2 = tree(unique("B"));
+    Tree ra2 = rec(a2, tree(symbol("f"), ref(b2), ref(a2), shared2));
+    Tree rb2 = rec(b2, tree(symbol("g"), ref(a2), shared2));
+    Tree root2 = tree(symbol("top"), ra2, rb2, shared2);
+    CHECK(root2 != root);              // different names, different symbolic trees
+    CHECK(sym2deBruijn(root2) == d);   // same canonical de Bruijn form
+
+    return ok;
+}
+
 bool checkRewrite()
 {
     bool ok = true;
