@@ -718,6 +718,13 @@ bool checkMutualRecursion()
     CHECK(root2 != root);              // different names, different symbolic trees
     CHECK(sym2deBruijn(root2) == d);   // same canonical de Bruijn form
 
+    // invariance predicate : true iff no symbolic recursive node below
+    CHECK(isSym2deBruijnInvariant(tree(symbol("k"), tree(1))));
+    CHECK(!isSym2deBruijnInvariant(ra));                         // a symbolic rec itself
+    CHECK(!isSym2deBruijnInvariant(tree(symbol("w"), ref(a))));  // contains a symbolic ref
+    CHECK(isSym2deBruijnInvariant(d));   // canonical de Bruijn form : symbolic-free
+    CHECK(sym2deBruijn(d) == d);         // and indeed a fixed point of the conversion
+
     return ok;
 }
 

@@ -47,6 +47,7 @@ static Sym  gSubstituteSym   = nullptr;
 static Sym  gSymLiftnSym     = nullptr;
 static Tree gRecDefKey       = nullptr;
 static Tree gDeBruijn2SymKey = nullptr;
+static Tree gSym2DebInvKey   = nullptr;
 
 static inline void initRecSymbols()
 {
@@ -73,6 +74,14 @@ static inline Tree debruijn2symKey()
     return gDeBruijn2SymKey;
 }
 
+static inline Tree sym2debInvariantKey()
+{
+    if (gSym2DebInvKey == nullptr) {
+        gSym2DebInvKey = tree(symbol("sym2deBruijnInvariant"));
+    }
+    return gSym2DebInvKey;
+}
+
 // Internal hook used by tlib::init()/cleanup() (see tlib.cpp)
 void tlibResetRecInternals()
 {
@@ -83,6 +92,7 @@ void tlibResetRecInternals()
     gSymLiftnSym     = nullptr;
     gRecDefKey       = nullptr;
     gDeBruijn2SymKey = nullptr;
+    gSym2DebInvKey   = nullptr;
     initRecSymbols();
 }
 
@@ -406,6 +416,38 @@ static int symbolicLevel(Tree var, Tree env)
     return 0;
 }
 
+// A tree is INVARIANT by sym2deBruijn (sym2deBruijn(t) == t) iff no symbolic
+// recursive node is reachable through its branches : every other node then
+// reconstructs to itself by hash-consing. The attribute is synthesized
+// (structural, environment-independent, fixed at construction) and memoized
+// as a persistent tree property. It could eventually become a bit
+// synthesized at construction time, like fAperture.
+bool isSym2deBruijnInvariant(Tree t)
+{
+    Tree var;
+    if (isSymbolicRef(t, var)) {
+        return false;
+    }
+    const int ar = t->arity();
+    if (ar == 0) {
+        return true;
+    }
+    Tree key    = sym2debInvariantKey();
+    Tree cached = t->getProperty(key);
+    if (cached) {
+        return tree2int(cached) != 0;
+    }
+    bool inv = true;
+    for (int i = 0; i < ar; i++) {
+        if (!isSym2deBruijnInvariant(t->branch(i))) {
+            inv = false;
+            break;
+        }
+    }
+    t->setProperty(key, tree(inv ? 1 : 0));
+    return inv;
+}
+
 struct Sym2DebState {
     std::unordered_map<Tree, Tree> closedMemo;       ///< closed results, keyed by term
     Sym2DebMemo                    envMemo;          ///< open results, keyed by (term, env)
@@ -417,6 +459,9 @@ struct Sym2DebState {
 // recursive definitions (bodies are attached as properties, not branches).
 static void scanForRecs(Tree t, std::unordered_set<Tree>& visited, std::vector<Tree>& found)
 {
+    if (isSym2deBruijnInvariant(t)) {
+        return;  // no symbolic recursive node below : nothing to collect
+    }
     if (!visited.insert(t).second) {
         return;
     }
@@ -555,6 +600,11 @@ static Tree sym2deBruijnRec(Tree recNode, Sym2DebState& state)
 
 static Tree sym2deBruijnAux(Tree t, Tree env, Sym2DebState& state)
 {
+    // Invariant subtrees convert to themselves : no traversal, no memo entry
+    if (isSym2deBruijnInvariant(t)) {
+        return t;
+    }
+
     // A closed result does not depend on the environment
     auto cIt = state.closedMemo.find(t);
     if (cIt != state.closedMemo.end()) {
