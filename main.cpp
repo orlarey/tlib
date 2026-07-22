@@ -28,7 +28,9 @@ int main(int, const char**)
     r &= checkLists();
     r &= checkSets();
     r &= checkEnvironments();
-    r &= checkRecursiveTrees() && checkMutualRecursion();
+    // Note the single '&' : '&&' would short-circuit, so a failure in checkRecursiveTrees
+    // would silently SKIP checkMutualRecursion instead of reporting it too.
+    r &= checkRecursiveTrees() & checkMutualRecursion();
     r &= checkRewrite();
     r &= checkGuardedRewrite();
     r &= checkDnfCnf();

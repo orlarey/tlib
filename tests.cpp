@@ -718,12 +718,22 @@ bool checkMutualRecursion()
     CHECK(root2 != root);              // different names, different symbolic trees
     CHECK(sym2deBruijn(root2) == d);   // same canonical de Bruijn form
 
-    // invariance predicate : true iff no symbolic recursive node below
-    CHECK(isSym2deBruijnInvariant(tree(symbol("k"), tree(1))));
-    CHECK(!isSym2deBruijnInvariant(ra));                         // a symbolic rec itself
-    CHECK(!isSym2deBruijnInvariant(tree(symbol("w"), ref(a))));  // contains a symbolic ref
-    CHECK(isSym2deBruijnInvariant(d));   // canonical de Bruijn form : symbolic-free
-    CHECK(sym2deBruijn(d) == d);         // and indeed a fixed point of the conversion
+    // Synthesized kContainsRec bit : true iff a recursive node occurs, in EITHER notation
+    CHECK(tree(symbol("k"), tree(1))->isRecFree());  // plain tree
+    CHECK(!ra->isRecFree());                         // a symbolic rec itself
+    CHECK(!tree(symbol("w"), ref(a))->isRecFree());  // contains a symbolic ref
+    CHECK(!d->isRecFree());                          // deBruijn recs count too
+    CHECK(ra->containsRec() != ra->isRecFree());     // the two accessors are dual
+
+    // Invariance by sym2deBruijn is now a COROLLARY of that bit, hence coarser : a
+    // canonical deBruijn form is still a fixed point of the conversion, it merely no
+    // longer takes the shortcut. The theorem that matters is the second line, and it holds.
+    CHECK(!isSym2deBruijnInvariant(d));  // coarser than before : d holds deBruijn recs
+    CHECK(sym2deBruijn(d) == d);         // yet still a fixed point of the conversion
+
+    // The synthesized attribute must agree with an independent traversal on EVERY tree
+    // the whole test suite has built so far.
+    CHECK(CTree::checkContainsInvariant() == 0);
 
     return ok;
 }
