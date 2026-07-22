@@ -34,7 +34,11 @@ add_library(tlib STATIC
     tlib/dcond.cpp
     tlib/occur.cpp)
 
-target_include_directories(tlib PUBLIC tlib)
+# DirectedGraph/ is the first vendored dependency of tlib. Header-only, so there is
+# nothing to compile or link -- only an include path. Recursive trees are part of
+# tlib's identity, and so is the strongly-connected-component structure of a recursive
+# term : rather than keep a hand-written Tarjan, tlib reuses the standalone library.
+target_include_directories(tlib PUBLIC tlib DirectedGraph)
 
 # the test executable
 add_executable(tlib-tests main.cpp tests.cpp tests.hh)
