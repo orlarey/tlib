@@ -751,6 +751,15 @@ bool checkMutualRecursion()
     CHECK(plan.components()[plan.sccOf(rc)].size() == 1);        // C alone
     CHECK(plan.components()[plan.sccOf(ra)].size() == 2);        // A and B together
 
+    // proj : project a component out of a recursive group, and read it back
+    Tree p = proj(1, ra);
+    int  pi = -1;
+    Tree pg = nullptr;
+    CHECK(isProj(p, pi, pg));            // recognised
+    CHECK(pi == 1 && pg == ra);          // index and group recovered
+    CHECK(!isProj(ra, pi, pg));          // a rec node is not a projection
+    CHECK(proj(1, ra) == p);             // hash-consed : same projection, same tree
+
     return ok;
 }
 
