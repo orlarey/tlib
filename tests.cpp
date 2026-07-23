@@ -735,6 +735,15 @@ bool checkMutualRecursion()
     // the whole test suite has built so far.
     CHECK(CTree::checkContainsInvariant() == 0);
 
+    // RecPlan : the component partition, exercised directly. A and B are mutually
+    // recursive (one component), C = h(C) is an independent lower component, and a plain
+    // node is not registered at all.
+    RecPlan plan(root);
+    CHECK(plan.sccOf(ra) == plan.sccOf(rb));  // A and B : same component
+    CHECK(plan.sccOf(rc) != plan.sccOf(ra));  // C : a different component
+    CHECK(plan.sccOf(rc) >= 0);               // but still registered
+    CHECK(plan.sccOf(shared) == -1);          // a non-recursive node : unregistered
+
     return ok;
 }
 
