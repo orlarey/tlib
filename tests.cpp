@@ -744,6 +744,13 @@ bool checkMutualRecursion()
     CHECK(plan.sccOf(rc) >= 0);               // but still registered
     CHECK(plan.sccOf(shared) == -1);          // a non-recursive node : unregistered
 
+    // components() are dependencies-first : {A,B} reference C (through shared), so C's
+    // component must come before theirs, hence a strictly smaller id.
+    CHECK(plan.sccOf(rc) < plan.sccOf(ra));
+    CHECK(plan.components().size() == 2);                        // {C} and {A,B}
+    CHECK(plan.components()[plan.sccOf(rc)].size() == 1);        // C alone
+    CHECK(plan.components()[plan.sccOf(ra)].size() == 2);        // A and B together
+
     return ok;
 }
 
