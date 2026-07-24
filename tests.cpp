@@ -7,12 +7,14 @@
 #include <cstring>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "dcond.hh"
+#include "fixpoint.hh"
 #include "occur.hh"
 #include "recursive-print.hh"
 #include "tests.hh"
@@ -1024,6 +1026,91 @@ bool checkErrorHandler()
     CHECK(caught);
     CHECK(gLastError.find("pointer") != std::string::npos);
     tlib::setErrorHandler(previous);
+
+    return ok;
+}
+
+//-----------------------------------------------------------------------------
+// FixPointIterator : exercise the generic engine end to end on a toy EXACT domain,
+// with no signals and no FaustAlgebra. The domain computes the set of ordinary
+// (non-proj) nodes reachable from a variable -- a finite lattice, so the fixpoint
+// converges by equality. This tests RecPlan consumption, the proj bridge, the Jacobi
+// solve, and mutual-recursion components.
+//-----------------------------------------------------------------------------
+
+namespace {
+
+using NodeSet = std::set<Tree>;
+
+// combine(node, kids) = {node} ∪ ⋃ kids. proj/rec are handled by the iterator, so
+// combine only ever sees ordinary nodes ; adding {node} captures each head it meets.
+struct ReachDomain : FixPointDomain<NodeSet> {
+    NodeSet bottom(Tree) const override { return {}; }
+    NodeSet top(Tree) const override { return {}; }  // unused : exact domain, never hits the guard
+    bool    lessEqual(const NodeSet& x, const NodeSet& y) const override
+    {
+        for (Tree t : x) {
+            if (y.find(t) == y.end()) return false;
+        }
+        return true;
+    }
+    NodeSet combine(Tree node, const std::vector<NodeSet>& kids) const override
+    {
+        NodeSet r;
+        r.insert(node);
+        for (const NodeSet& k : kids) r.insert(k.begin(), k.end());
+        return r;
+    }
+};
+
+}  // namespace
+
+bool checkFixPoint()
+{
+    bool       ok = true;
+    ReachDomain dom;
+
+    // --- Self recursion, signals form : X = rec(a, [ g(proj0(X)) ]) ---
+    // Its reachable set is the single head g, reached once (the recursion adds nothing new).
+    Tree a    = tree(unique("A"));
+    Tree gArg = tree(symbol("g"), proj(0, ref(a)));  // proj0(ref(a)) == proj0(X) by hash-consing
+    Tree X    = rec(a, list1(gArg));
+    Tree rootX = proj(0, X);
+
+    RecPlan                    planX(rootX);
+    FixPointIterator<NodeSet>  itX(planX, dom);
+    NodeSet                    vx = itX.value(rootX);
+    CHECK(vx == NodeSet{gArg});
+    CHECK(itX.variableValue(X)[0] == NodeSet{gArg});
+
+    // --- Mutual recursion, signals form : X = rec(a, [ g(proj0(Y)) ]),
+    //     Y = rec(b, [ h(proj0(X)) ]). Both reach {g, h} : the Jacobi solve of the
+    //     two-member component must propagate each into the other. ---
+    Tree b  = tree(unique("B"));
+    Tree gX = tree(symbol("g"), proj(0, ref(b)));  // depends on Y
+    Tree hY = tree(symbol("h"), proj(0, ref(a)));  // depends on X
+    Tree X2 = rec(a, list1(gX));
+    Tree Y2 = rec(b, list1(hY));
+    Tree root2 = tree(symbol("top"), proj(0, X2), proj(0, Y2));
+
+    RecPlan planM(root2);
+    CHECK(planM.sccOf(X2) == planM.sccOf(Y2));  // one mutual component
+    FixPointIterator<NodeSet> itM(planM, dom);
+    NodeSet                   both{gX, hY};
+    CHECK(itM.variableValue(X2)[0] == both);
+    CHECK(itM.variableValue(Y2)[0] == both);
+
+    // --- A group of two branches in one variable : X = rec(a, [ g(proj0(X)), h(proj1(X)) ]).
+    //     Branch 0 reaches {g}, branch 1 reaches {h} -- distinct rows, no cross-talk. ---
+    Tree c   = tree(unique("C"));
+    Tree e0  = tree(symbol("g"), proj(0, ref(c)));
+    Tree e1  = tree(symbol("h"), proj(1, ref(c)));
+    Tree Xg  = rec(c, list2(e0, e1));
+
+    RecPlan planG(tree(symbol("top"), proj(0, Xg), proj(1, Xg)));
+    FixPointIterator<NodeSet> itG(planG, dom);
+    CHECK(itG.variableValue(Xg)[0] == NodeSet{e0});
+    CHECK(itG.variableValue(Xg)[1] == NodeSet{e1});
 
     return ok;
 }

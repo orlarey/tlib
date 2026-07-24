@@ -31,6 +31,7 @@ int main(int, const char**)
     // Note the single '&' : '&&' would short-circuit, so a failure in checkRecursiveTrees
     // would silently SKIP checkMutualRecursion instead of reporting it too.
     r &= checkRecursiveTrees() & checkMutualRecursion();
+    r &= checkFixPoint();
     r &= checkRewrite();
     r &= checkGuardedRewrite();
     r &= checkDnfCnf();
