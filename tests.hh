@@ -20,6 +20,7 @@ bool checkEnvironments();
 bool checkRecursiveTrees();
 bool checkMutualRecursion();
 bool checkFixPoint();
+bool checkFixPointInterval();
 bool checkRewrite();
 bool checkGuardedRewrite();
 bool checkDnfCnf();

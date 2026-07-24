@@ -1116,6 +1116,161 @@ bool checkFixPoint()
 }
 
 //-----------------------------------------------------------------------------
+// FixPointIterator on a toy APPROXIMATE domain : intervals. Exercises the parts the
+// exact domain doesn't -- widening, narrowing, and the descending probe -- still in
+// tlib, with no signals. combine interprets a tiny language (int constant, add, sub,
+// mod, delay) over saturating intervals. This is the shape of the real interval domain.
+//-----------------------------------------------------------------------------
+
+namespace {
+
+constexpr long IBIG = 1L << 30;  // stands for infinity ; arithmetic saturates here
+
+struct Itv {
+    long lo    = 0;
+    long hi    = 0;
+    bool empty = true;
+    bool operator==(const Itv& o) const
+    {
+        return empty == o.empty && (empty || (lo == o.lo && hi == o.hi));
+    }
+};
+
+static long sat(long v)
+{
+    return v < -IBIG ? -IBIG : (v > IBIG ? IBIG : v);
+}
+static Itv finite(long lo, long hi) { return Itv{sat(lo), sat(hi), false}; }
+static Itv empty() { return Itv{}; }
+
+static Itv iadd(const Itv& a, const Itv& b)
+{
+    if (a.empty || b.empty) return empty();
+    return finite(a.lo + b.lo, a.hi + b.hi);
+}
+static Itv isub(const Itv& a, const Itv& b)
+{
+    if (a.empty || b.empty) return empty();
+    return finite(a.lo - b.hi, a.hi - b.lo);
+}
+static Itv ijoin(const Itv& a, const Itv& b)
+{
+    if (a.empty) return b;
+    if (b.empty) return a;
+    return finite(std::min(a.lo, b.lo), std::max(a.hi, b.hi));
+}
+// a mod M for a POSITIVE constant modulus [M,M]. Sound interval semantics of C's %.
+static Itv imod(const Itv& a, const Itv& m)
+{
+    if (a.empty) return empty();
+    if (m.empty || m.lo != m.hi || m.lo <= 0) return finite(-IBIG, IBIG);
+    long M = m.lo;
+    if (a.lo >= 0) {
+        if (a.hi >= IBIG || (a.hi - a.lo) >= M) return finite(0, M - 1);
+        long rl = a.lo % M, rh = a.hi % M;
+        return (rl <= rh) ? finite(rl, rh) : finite(0, M - 1);
+    }
+    if (a.hi <= 0) {
+        if (a.lo <= -IBIG || (a.hi - a.lo) >= M) return finite(-(M - 1), 0);
+        long rl = a.lo % M, rh = a.hi % M;  // C : sign of dividend
+        return (rl <= rh) ? finite(rl, rh) : finite(-(M - 1), 0);
+    }
+    return finite(-(M - 1), M - 1);  // spans 0
+}
+
+struct IntervalDomain : FixPointDomain<Itv> {
+    struct Probe {
+        bool certified = false;
+        Itv  value;
+    };
+    mutable std::unordered_map<Tree, Probe> fProbe;  // filled by recordProbe, read by widen
+
+    Itv  bottom(Tree) const override { return empty(); }
+    Itv  top(Tree) const override { return finite(-IBIG, IBIG); }
+    bool lessEqual(const Itv& x, const Itv& y) const override
+    {
+        if (x.empty) return true;
+        if (y.empty) return false;
+        return y.lo <= x.lo && x.hi <= y.hi;
+    }
+
+    Itv combine(Tree node, const std::vector<Itv>& kids) const override
+    {
+        int c;
+        if (isInt(node->node(), &c)) return finite(c, c);
+        if (node->node() == Node(symbol("add"))) return iadd(kids[0], kids[1]);
+        if (node->node() == Node(symbol("sub"))) return isub(kids[0], kids[1]);
+        if (node->node() == Node(symbol("mod"))) return imod(kids[0], kids[1]);
+        if (node->node() == Node(symbol("delay"))) return ijoin(kids[0], finite(0, 0));  // ⊔ {0}
+        return finite(-IBIG, IBIG);  // unknown leaf/op
+    }
+
+    int widenAfter() const override { return 3; }
+    int maxIterations() const override { return 100000; }
+    int maxNarrowingIterations() const override { return 4; }
+
+    std::optional<Itv> probeSeed(Tree) const override { return finite(0, IBIG); }
+    void recordProbe(Tree var, const Itv& probed, bool certified) const override
+    {
+        fProbe[var] = Probe{certified, probed};
+    }
+
+    Itv widen(Tree var, const Itv& old, const Itv& fresh) const override
+    {
+        if (old.empty) return fresh;  // widen(⊥, x) = x
+        auto       it        = fProbe.find(var);
+        const bool certified = (it != fProbe.end() && it->second.certified);
+        const long thresh    = (it != fProbe.end() ? it->second.value.hi : IBIG);
+        // Lower : if it drops, jump to 0 when the SCC is certified ≥0, else to -∞.
+        long lo = (fresh.lo < old.lo) ? (certified ? 0 : -IBIG) : old.lo;
+        // Upper : if it grows, jump to the probe threshold when certified, else to +∞.
+        long hi = (fresh.hi > old.hi) ? (certified ? thresh : IBIG) : old.hi;
+        return finite(lo, hi);
+    }
+};
+
+}  // namespace
+
+bool checkFixPointInterval()
+{
+    bool           ok = true;
+    IntervalDomain dom;
+
+    // --- Cyclic counter : x = (1 + x@1) mod 2000, attribute [0, 1999]. ---
+    // Naive would need ~2000 narrowing rounds ; the probe certifies ≥0 and hands a
+    // threshold of 1999, so the real pass lands on [0,1999] in a handful of rounds.
+    Tree idx  = tree(unique("X"));
+    Tree xAt1 = tree(symbol("delay"), proj(0, ref(idx)));
+    Tree body = tree(symbol("mod"), tree(symbol("add"), tree(1), xAt1), tree(2000));
+    Tree X    = rec(idx, list1(body));
+    Tree root = proj(0, X);
+
+    RecPlan                planX(root);
+    FixPointIterator<Itv>  itX(planX, dom);
+    Itv                    vx = itX.value(root);
+    CHECK((vx == finite(0, 1999)));
+    CHECK(dom.fProbe.at(proj(0, X)).certified);  // the counter was certified ≥ 0
+
+    // --- Genuinely negative oscillator : y = -1 - y@1, values {-1,0}. ---
+    // The probe must FAIL (the seed [0,+BIG] is not a post-fixpoint), and the real pass
+    // from ∅ must still find the exact [-1,0] without widening.
+    IntervalDomain dom2;
+    Tree idy  = tree(unique("Y"));
+    Tree yAt1 = tree(symbol("delay"), proj(0, ref(idy)));
+    Tree bodyY = tree(symbol("sub"), tree(-1), yAt1);
+    Tree Y     = rec(idy, list1(bodyY));
+    Tree rootY = proj(0, Y);
+
+    RecPlan               planY(rootY);
+    FixPointIterator<Itv> itY(planY, dom2);
+    Itv                   vy = itY.value(rootY);
+    CHECK((vy == finite(-1, 0)));
+    CHECK(!dom2.fProbe.at(proj(0, Y)).certified);  // the oscillator was NOT certified
+
+    return ok;
+}
+
+//-----------------------------------------------------------------------------
 // Lifecycle : cleanup() ends a session, the library is reusable right after
 //-----------------------------------------------------------------------------
 

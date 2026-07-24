@@ -32,6 +32,7 @@ int main(int, const char**)
     // would silently SKIP checkMutualRecursion instead of reporting it too.
     r &= checkRecursiveTrees() & checkMutualRecursion();
     r &= checkFixPoint();
+    r &= checkFixPointInterval();
     r &= checkRewrite();
     r &= checkGuardedRewrite();
     r &= checkDnfCnf();
