@@ -1054,8 +1054,10 @@ struct ReachDomain : FixPointDomain<NodeSet> {
         }
         return true;
     }
-    NodeSet combine(Tree node, const std::vector<NodeSet>& kids) const override
+    mutable int fCombineCalls = 0;  // to check the memo prevents exponential recompute
+    NodeSet     combine(Tree node, const std::vector<NodeSet>& kids) const override
     {
+        ++fCombineCalls;
         NodeSet r;
         r.insert(node);
         for (const NodeSet& k : kids) r.insert(k.begin(), k.end());
@@ -1111,6 +1113,20 @@ bool checkFixPoint()
     FixPointIterator<NodeSet> itG(planG, dom);
     CHECK(itG.variableValue(Xg)[0] == NodeSet{e0});
     CHECK(itG.variableValue(Xg)[1] == NodeSet{e1});
+
+    // --- Memo : a heavily-shared rec-free DAG must be combined ONCE per distinct node,
+    //     not exponentially. 30 levels, each referencing the level below twice : 2^30
+    //     evaluations if recomputed, 31 distinct hash-consed nodes if memoized. This is
+    //     the isRecFree / invariant fast path (the kContainsRec bit) at work. ---
+    ReachDomain dagDom;
+    Tree        dag = tree(symbol("leaf"));
+    for (int i = 0; i < 30; ++i) {
+        dag = tree(symbol("f"), dag, dag);  // hash-consed : one node per level
+    }
+    RecPlan                   planD(dag);   // no recursion : the plan is empty
+    FixPointIterator<NodeSet> itD(planD, dagDom);
+    (void)itD.value(dag);
+    CHECK(dagDom.fCombineCalls == 31);  // 30 f-levels + 1 leaf, each combined exactly once
 
     return ok;
 }
