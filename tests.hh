@@ -31,3 +31,5 @@ bool checkLifecycle();
 bool checkHashTableGrowth();
 
 bool checkDescend();
+bool checkDescendFixpoint();
+bool checkGcRecGroups();

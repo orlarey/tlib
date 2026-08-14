@@ -1601,3 +1601,199 @@ bool checkDescend()
 
     return ok;
 }
+
+//----------------------------------------------------------------------------
+// The unified descending engine (spec DESCEND-REGIME-C) : recompute-and-
+// compare chaotic iteration, closed strategy set, doors as ordinary edges.
+//----------------------------------------------------------------------------
+bool checkDescendFixpoint()
+{
+    bool ok = true;
+
+    // 1) acyclic sharing : path count through a diamond (non-idempotent sum,
+    // the equation that a join-only engine could not express)
+    Tree x    = tree(symbol("x"));
+    Tree a    = tree(symbol("a"), x);
+    Tree b    = tree(symbol("b"), x);
+    Tree top  = tree(symbol("top"), a, b);
+    int  evals = 0;
+    auto paths = descendFixpoint<int>(
+        top, 0, 1,
+        [](Tree, int, const int& pa) { return pa; },
+        [&evals](Tree, const std::vector<int>& in) {
+            evals++;
+            int s = 0;
+            for (int v : in) {
+                s += v;
+            }
+            return s;
+        });
+    CHECK(paths.at(top) == 1);
+    CHECK(paths.at(a) == 1 && paths.at(b) == 1);
+    CHECK(paths.at(x) == 2);            // two paths, no double-count
+    CHECK(evals == 4);                  // acyclic + reverse postorder : ONE sweep,
+                                        // one recomputation per node (regimes A/B
+                                        // as the emergent behavior of the default)
+
+    // 2) regime A embeds : edge counting with a CONSTANT door contribution
+    // reproduces descendAttribute exactly (the absorbing door is the special
+    // case where the door edge ignores its source)
+    Tree c   = tree(unique("C"));
+    Tree cyc = rec(c, tree(symbol("h"), ref(c)));
+    Tree id, body;
+    CHECK(isRec(cyc, id, body));
+    Tree r2 = tree(symbol("Dr"), cyc, cyc);
+    auto oldE = descendAttribute<int>(
+        r2, 1, [](Tree, int, const int&) { return 1; },
+        [](const int& u, const int& v) { return u + v; });
+    auto newE = descendFixpoint<int>(
+        r2, 0, 1,
+        [](Tree, int, const int&) { return 1; },
+        [](Tree, const std::vector<int>& in) {
+            int s = 0;
+            for (int v : in) {
+                s += v;
+            }
+            return s;
+        },
+        nullptr,                                  // default doors (RECDEF)
+        [](Tree, const int&) { return 1; });      // edge-local door : regime A
+    CHECK(newE.at(cyc) == oldE.at(cyc));          // 2 external uses + 1 self-ref
+    CHECK(newE.at(body) == oldE.at(body));        // the constant door edge
+
+    // 3) a TRUE fixpoint through the cycle : chained path count, kept finite
+    // by saturation (the '+ has no finite least solution' case, tamed by a
+    // finite-height domain)
+    auto sat = [](int v) { return v > 9 ? 9 : v; };
+    auto satCount = [&](DescendStrategy st) {
+        return descendFixpoint<int>(
+            r2, 0, 1,
+            [](Tree, int, const int& pa) { return pa; },
+            [&sat](Tree, const std::vector<int>& in) {
+                int s = 0;
+                for (int v : in) {
+                    s += v;
+                }
+                return sat(s);
+            },
+            nullptr, nullptr, st);
+    };
+    auto s1 = satCount(DescendStrategy::kReversePostorder);
+    CHECK(s1.at(cyc) == 9);             // climbed to saturation, then stopped
+
+    // 4) canonicity across strategies : Knaster-Tarski as a regression test
+    auto s2 = satCount(DescendStrategy::kFifo);
+    auto s3 = satCount(DescendStrategy::kLifo);
+    CHECK(s1 == s2 && s2 == s3);
+
+    return ok;
+}
+
+//----------------------------------------------------------------------------
+// gcRecGroups (spec GC-MEMBRES) : liveness by reachability, then surgery.
+//----------------------------------------------------------------------------
+static int groupSize(Tree g)
+{
+    Tree id, body;
+    if (!isRec(g, id, body) || body == nullptr) {
+        return -1;
+    }
+    int n = 0;
+    for (Tree l = body; isList(l); l = tl(l)) {
+        n++;
+    }
+    return n;
+}
+
+bool checkGcRecGroups()
+{
+    bool ok = true;
+
+    // 1) direct : W = (d, r, s), r never referenced -> (d, s), renumbered
+    {
+        Tree x = tree(unique("W"));
+        Tree w = ref(x);
+        Tree dd = tree(symbol("D"), proj(0, w));
+        Tree rr = tree(symbol("R"), proj(2, w));
+        Tree ss = tree(symbol("S"), proj(2, w));
+        rec(x, cons(dd, cons(rr, cons(ss, nil()))));
+        Tree root = tree(symbol("top"), proj(0, w), proj(2, w));
+        Tree g    = gcRecGroups(root);
+        CHECK(g != root);
+        int  i0, i1;
+        Tree g0, g1;
+        CHECK(isProj(g->branch(0), i0, g0) && isProj(g->branch(1), i1, g1));
+        CHECK(g0 == g1);
+        CHECK(i0 == 0 && i1 == 1);      // sigma : {0 -> 0, 2 -> 1}
+        CHECK(groupSize(g0) == 2);
+        // 6) idempotence : nothing dead remains, second call is identity
+        CHECK(gcRecGroups(g) == g);
+    }
+
+    // 2) cascade : t read only by the dead r -> both collected
+    {
+        Tree x = tree(unique("W"));
+        Tree w = ref(x);
+        Tree dd = tree(symbol("D"), proj(0, w));
+        Tree rr = tree(symbol("R"), proj(2, w));
+        Tree tt = tree(symbol("T"), proj(2, w));
+        rec(x, cons(dd, cons(rr, cons(tt, nil()))));
+        Tree root = tree(symbol("top"), proj(0, w));
+        Tree g    = gcRecGroups(root);
+        int  i0;
+        Tree g0;
+        CHECK(isProj(g->branch(0), i0, g0));
+        CHECK(i0 == 0 && groupSize(g0) == 1);
+    }
+
+    // 3) dead cycle : x and y reference each other, nobody external -> both die
+    {
+        Tree x = tree(unique("W"));
+        Tree w = ref(x);
+        Tree dd = tree(symbol("D"), proj(0, w));
+        Tree xx = tree(symbol("X"), proj(2, w));
+        Tree yy = tree(symbol("Y"), proj(1, w));
+        rec(x, cons(dd, cons(xx, cons(yy, nil()))));
+        Tree root = tree(symbol("top"), proj(0, w));
+        Tree g    = gcRecGroups(root);
+        int  i0;
+        Tree g0;
+        CHECK(isProj(g->branch(0), i0, g0));
+        CHECK(i0 == 0 && groupSize(g0) == 1);
+    }
+
+    // 4) live cycle : same knot, one external reference -> everything stays,
+    // pointer-identical (invariant 4 -- and the old alias-cycle guard as a
+    // theorem)
+    {
+        Tree v = tree(unique("V"));
+        Tree w = ref(v);
+        Tree xx = tree(symbol("X"), proj(1, w));
+        Tree yy = tree(symbol("Y"), proj(0, w));
+        rec(v, cons(xx, cons(yy, nil())));
+        Tree root = tree(symbol("top"), proj(1, w));
+        CHECK(gcRecGroups(root) == root);
+    }
+
+    // 5) nested : the inner group lives inside a dead member of the outer
+    // one -> disappears with it, the owner rule needs no special case
+    {
+        Tree u = tree(unique("I"));
+        Tree wi = ref(u);
+        rec(u, cons(tree(symbol("U"), proj(0, wi)), nil()));
+
+        Tree o = tree(unique("O"));
+        Tree wo = ref(o);
+        Tree aa = tree(symbol("A"), proj(0, wo));
+        Tree bb = tree(symbol("B"), proj(0, wi));
+        rec(o, cons(aa, cons(bb, nil())));
+        Tree root = tree(symbol("top"), proj(0, wo));
+        Tree g    = gcRecGroups(root);
+        int  i0;
+        Tree g0;
+        CHECK(isProj(g->branch(0), i0, g0));
+        CHECK(i0 == 0 && groupSize(g0) == 1);
+    }
+
+    return ok;
+}

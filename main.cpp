@@ -39,6 +39,8 @@ int main(int, const char**)
     r &= checkGuardedRewrite();
     r &= checkDnfCnf();
     r &= checkDescend();
+    r &= checkDescendFixpoint();
+    r &= checkGcRecGroups();
     r &= checkErrorHandler();
     r &= checkHashTableGrowth();
     r &= checkLifecycle();  // last : it wipes the tree population
