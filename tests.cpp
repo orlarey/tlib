@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
+#include <climits>
 #include <cstring>
 #include <iostream>
 #include <optional>
@@ -306,6 +307,17 @@ bool checkNodes()
     CHECK(isZero(Node(0)) && isZero(Node(0.0)) && !isZero(Node(1)));
     CHECK(isOne(Node(1)) && isMinusOne(Node(-1)));
     CHECK(sameMagnitude(Node(-3), Node(3.0)));
+    // the edge of int : |INT_MIN| does not fit an int, the magnitude must
+    // be taken in a wider type
+    CHECK(sameMagnitude(Node(INT_MIN), Node(INT_MIN)));
+    CHECK(!sameMagnitude(Node(INT_MIN), Node(INT_MAX)));
+
+    // int64 payloads print as their value, not as "badnode"
+    {
+        std::ostringstream oss;
+        oss << Node(int64_t(1) << 40);
+        CHECK(oss.str() == "1099511627776");
+    }
 
     return ok;
 }
@@ -451,6 +463,38 @@ bool checkTypedProperties()
     CHECK(memo.get(a, b1, r) && r == tree(11));
     memo.clear(a);
     CHECK(!memo.get(a, b1, r));
+
+    // The GENERIC property<P> (a non-specialized payload goes through the
+    // owning GarbageablePtr wrapper) : set / overwrite in place / clear /
+    // set again. The sanitize build watches the frees on this path.
+    property<std::string> names;
+    Tree                  h = tree(symbol("named"), tree(7));
+    std::string           sv;
+    CHECK(!names.get(h, sv));
+    names.set(h, std::string("first"));
+    CHECK(names.get(h, sv) && sv == "first");
+    names.set(h, std::string("second"));
+    CHECK(names.get(h, sv) && sv == "second");
+    names.clear(h);
+    CHECK(!names.get(h, sv));
+    names.set(h, std::string("third"));
+    CHECK(names.get(h, sv) && sv == "third");
+
+    // The GENERIC property2<P> (first instantiation in the suite) : inline
+    // pair, promotion on the second 'b', overwrite, clear
+    property2<std::string> gmemo;
+    Tree                   ga = tree(symbol("ghost"));
+    CHECK(!gmemo.get(ga, b1, sv));
+    gmemo.set(ga, b1, std::string("one"));
+    CHECK(gmemo.get(ga, b1, sv) && sv == "one");
+    CHECK(!gmemo.get(ga, b2, sv));
+    gmemo.set(ga, b2, std::string("two"));  // promotes the inline slot
+    CHECK(gmemo.get(ga, b1, sv) && sv == "one");
+    CHECK(gmemo.get(ga, b2, sv) && sv == "two");
+    gmemo.set(ga, b1, std::string("uno"));
+    CHECK(gmemo.get(ga, b1, sv) && sv == "uno");
+    gmemo.clear(ga);
+    CHECK(!gmemo.get(ga, b1, sv));
 
     return ok;
 }
@@ -1640,7 +1684,7 @@ bool checkDescendFixpoint()
     // case where the door edge ignores its source)
     Tree c   = tree(unique("C"));
     Tree cyc = rec(c, tree(symbol("h"), ref(c)));
-    Tree id, body;
+    Tree id = nullptr, body = nullptr;
     CHECK(isRec(cyc, id, body));
     Tree r2 = tree(symbol("Dr"), cyc, cyc);
     auto oldE = descendAttribute<int>(
@@ -1659,7 +1703,7 @@ bool checkDescendFixpoint()
         nullptr,                                  // default doors (RECDEF)
         [](Tree, const int&) { return 1; });      // edge-local door : regime A
     CHECK(newE.at(cyc) == oldE.at(cyc));          // 2 external uses + 1 self-ref
-    CHECK(newE.at(body) == oldE.at(body));        // the constant door edge
+    CHECK(body && newE.at(body) == oldE.at(body));  // the constant door edge
 
     // 3) a TRUE fixpoint through the cycle : chained path count, kept finite
     // by saturation (the '+ has no finite least solution' case, tamed by a
@@ -1695,7 +1739,9 @@ bool checkDescendFixpoint()
 static int groupSize(Tree g)
 {
     Tree id, body;
-    if (!isRec(g, id, body) || body == nullptr) {
+    // total on nullptr so red paths stay defined (a failed isProj CHECK
+    // leaves its group output null, and the next CHECK still evaluates)
+    if (g == nullptr || !isRec(g, id, body) || body == nullptr) {
         return -1;
     }
     int n = 0;
@@ -1720,8 +1766,8 @@ bool checkGcRecGroups()
         Tree root = tree(symbol("top"), proj(0, w), proj(2, w));
         Tree g    = gcRecGroups(root);
         CHECK(g != root);
-        int  i0, i1;
-        Tree g0, g1;
+        int  i0 = -1, i1 = -1;
+        Tree g0 = nullptr, g1 = nullptr;
         CHECK(isProj(g->branch(0), i0, g0) && isProj(g->branch(1), i1, g1));
         CHECK(g0 == g1);
         CHECK(i0 == 0 && i1 == 1);      // sigma : {0 -> 0, 2 -> 1}
@@ -1740,8 +1786,8 @@ bool checkGcRecGroups()
         rec(x, cons(dd, cons(rr, cons(tt, nil()))));
         Tree root = tree(symbol("top"), proj(0, w));
         Tree g    = gcRecGroups(root);
-        int  i0;
-        Tree g0;
+        int  i0 = -1;
+        Tree g0 = nullptr;
         CHECK(isProj(g->branch(0), i0, g0));
         CHECK(i0 == 0 && groupSize(g0) == 1);
     }
@@ -1756,8 +1802,8 @@ bool checkGcRecGroups()
         rec(x, cons(dd, cons(xx, cons(yy, nil()))));
         Tree root = tree(symbol("top"), proj(0, w));
         Tree g    = gcRecGroups(root);
-        int  i0;
-        Tree g0;
+        int  i0 = -1;
+        Tree g0 = nullptr;
         CHECK(isProj(g->branch(0), i0, g0));
         CHECK(i0 == 0 && groupSize(g0) == 1);
     }
@@ -1789,8 +1835,8 @@ bool checkGcRecGroups()
         rec(o, cons(aa, cons(bb, nil())));
         Tree root = tree(symbol("top"), proj(0, wo));
         Tree g    = gcRecGroups(root);
-        int  i0;
-        Tree g0;
+        int  i0 = -1;
+        Tree g0 = nullptr;
         CHECK(isProj(g->branch(0), i0, g0));
         CHECK(i0 == 0 && groupSize(g0) == 1);
     }
