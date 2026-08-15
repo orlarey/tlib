@@ -57,11 +57,11 @@ int main()
 | `tlib/symbol.hh/.cpp` | interned symbols and `Signature`: dense, disjoint constructor opcodes — see [SIGNATURE-SPEC.md](SIGNATURE-SPEC.md) |
 | `tlib/property.hh` | `property<P>` (unary) and `property2<Tree>` (binary) memoization |
 | `tlib/list.hh/.cpp` | lists, sets (canonical ordered lists), environments |
-| `tlib/recursive-tree.cpp` | `rec` / `ref`: de Bruijn and symbolic recursive trees; `deBruijn2Sym` is canonical (content-derived names, same tree in → same pointer out) |
+| `tlib/recursive-tree.cpp` | `rec` / `ref`: de Bruijn and symbolic recursive trees; `deBruijn2Sym` is canonical (content-derived names, same tree in → same pointer out); `normalizeRecGroups` re-partitions every letrec along the SCCs of the projection graph; `gcRecGroups` drops the members no longer reachable from outside |
 | `tlib/recursive-print.hh/.cpp` | `toDeBruijnString` / `toSymbolicString` diagnostics |
 | `tlib/rewrite.hh` | `treeRewrite` (plain and `pre`/`post` guarded) and `treeRewritePaired` (paired rule, exposed memo, definition seam): bottom-up rewriting over shared and symbolic-recursive trees — see [REWRITE-SPEC.md](REWRITE-SPEC.md) |
 | `tlib/fixpoint.hh` | generic attribute computation by fixed point over recursive terms (Kleene ascent + widening/narrowing, descending probe) |
-| `tlib/descend.hh` | `descendAttribute`: generic descending (inherited) attribute over a tree, a DAG or a **symbolic** recursive term — contribution, join, absorbing doors |
+| `tlib/descend.hh` | `descendAttribute`: generic descending (inherited) attribute over a tree, a DAG or a **symbolic** recursive term — contribution, join, absorbing doors. `descendFixpoint`: the same, generalized to equations that read what reaches them — least fixed point by fair chaotic iteration over a monotone, finite-height domain (one sweep on an acyclic instance) |
 | `tlib/dcond.hh/.cpp` | boolean conditions in DNF/CNF (optional module) |
 | `tlib/garbageable.hh/.cpp` | session memory model: allocate freely, free all at cleanup |
 | `tlib/tlib-error.hh/.cpp` | pluggable error handler (defaults to `std::runtime_error`) |

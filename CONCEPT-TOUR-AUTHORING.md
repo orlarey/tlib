@@ -379,6 +379,23 @@ chapter — *code references verified at `<sha>`* — tells a reader how much
 history separates the text from the current source, and turns
 re-verification into a targeted diff instead of a full re-read.
 
+**Move a stamp only after re-verifying, and never realign a reference by
+arithmetic.** These are one rule seen from two ends, and this document was
+written before its author had broken it. Re-verifying a chapter, one finds
+references that were already wrong *at the sha the stamp claimed* — because
+they had been "updated" by adding the size of a diff instead of by searching
+for their text. Insertions are never uniform: one file had grown by one line
+near its top, eleven a third of the way down, thirty-two lower still, so no
+single offset was right for any two anchors. And a stamp that was advanced
+without a real check is worse than no stamp at all, because its whole function
+is to *extinguish doubt* — it tells the next reader not to look.
+
+So: **re-derive every anchor by searching for the text it names**, and make the
+check emit a readable trace — file, line, and the content of that line —
+because nothing else distinguishes "verified" from "recomputed". A one-line
+script that prints every reference next to the source line it lands on turns a
+tedious act of faith into ten seconds of reading.
+
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
 vendored copy of it. Decide, before the first finding, where findings
@@ -451,6 +468,8 @@ produced them.
 - [ ] Examples exist as a compiled, tested target — not prose only
 - [ ] Invariants discovered while writing are also written at the code site
 - [ ] Concept stamped with the commit its code references were verified against
+- [ ] Every anchor re-derived by searching its text, never by shifting a number
+- [ ] The re-verification printed a trace: file, line, and the line's content
 - [ ] Findings routed to their owner, and closed only once every copy is fixed and tested
 - [ ] Comments near recently changed code re-read, not just the changed lines
 - [ ] Each finding taken as far up as it goes: documented, checked, or made unconstructible

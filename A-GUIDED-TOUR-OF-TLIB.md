@@ -307,8 +307,8 @@ Sym fAdd = fSignature.add("Arithmetic.Add");
 Sym fSub = fSignature.add("Arithmetic.Sub");
 ```
 
-`signature(name)` ([symbol.hh:231](tlib/symbol.hh#L231)) returns a copyable
-handle ([symbol.hh:167](tlib/symbol.hh#L167)) to an interned signature, and
+`signature(name)` ([symbol.hh:260](tlib/symbol.hh#L260)) returns a copyable
+handle ([symbol.hh:165](tlib/symbol.hh#L165)) to an interned signature, and
 `add(name)` interns a constructor symbol into it. Each signature owns a
 disjoint range of 256 opcodes and assigns dense local positions inside it, so
 that a fold can dispatch on `tag.localOpcode()` with a jump table instead of
@@ -339,7 +339,7 @@ introduced properly. What matters here is only the shape: the `switch` is the
 fold's dispatch, and it is O(1) in the number of constructors. The full
 specification is [SIGNATURE-SPEC.md](SIGNATURE-SPEC.md); the API is
 [symbol.hh:56-83](tlib/symbol.hh#L56-L83) and
-[symbol.hh:221-251](tlib/symbol.hh#L221-L251).
+[symbol.hh:165-280](tlib/symbol.hh#L165-L280).
 
 Note finally what the fold checks before dispatching: that the node carries a
 symbol, that the symbol belongs to *this* algebra's signature, and that its
@@ -390,7 +390,7 @@ second fails. This is why the example above names its constructors
 language is the convention that keeps independent clients out of each other's
 way. What signatures make disjoint is the *opcode space*, not the *name space*.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Origins
 
@@ -557,7 +557,7 @@ form and let structural sharing apply to *it*.
 ## In the code
 
 The whole mechanism is `CTree::make` in
-[tree.cpp:319](tlib/tree.cpp#L319):
+[tree.cpp:325](tlib/tree.cpp#L325):
 
 ```cpp
 size_t hk = calcTreeHash(n, ar, tbl);
@@ -583,7 +583,7 @@ type system enforces outright.
 
 Two details in those lines matter more than their size suggests.
 
-`equiv` ([tree.cpp:290](tlib/tree.cpp#L290)) compares the node and then the
+`equiv` ([tree.cpp:287](tlib/tree.cpp#L287)) compares the node and then the
 children **by pointer**, not recursively:
 
 ```cpp
@@ -597,7 +597,7 @@ This is the induction of the previous section made concrete. A structural
 comparison here would make construction quadratic; pointer comparison is legal
 only because every child was itself obtained from `make`.
 
-`calcTreeHash` ([tree.cpp:308](tlib/tree.cpp#L308)) combines the raw bits of
+`calcTreeHash` ([tree.cpp:314](tlib/tree.cpp#L314)) combines the raw bits of
 the node with the *stored hash keys* of the children — again not by traversing
 them — so hashing a node is $O(\mathrm{arity})$ regardless of depth. The hash
 is only a bucket index: correctness rests entirely on `equiv`, and a collision
@@ -621,7 +621,7 @@ changes.
 **`fCanonHash`** ([tree.hh:287](tlib/tree.hh#L287)) exists for the cases where
 that is not good enough. It is a structural hash synthesised at construction
 from the node's canonical hash and the children's — and the way the children
-are combined ([tree.cpp:186](tlib/tree.cpp#L186)) is worth a second look,
+are combined ([tree.cpp:189](tlib/tree.cpp#L189)) is worth a second look,
 because the obvious formula is wrong here:
 
 ```cpp
@@ -639,7 +639,7 @@ Faust's associative-commutative judge and was fixed there too; the pattern is
 now banned in both.
 
 `canonicalTreeLess`
-([tree.cpp:229](tlib/tree.cpp#L229)) uses it as the primary key of a total
+([tree.cpp:231](tlib/tree.cpp#L231)) uses it as the primary key of a total
 order derived from *values only* — symbols compared by name, ties broken
 structurally. Two processes that build the same term values order them
 identically, whatever their construction history, which is what canonical forms
@@ -676,7 +676,7 @@ constructed trees never receive a single property
 ([tree.hh:182](tlib/tree.hh#L182)), which is why property lists are allocated
 lazily rather than being an inline member; and most insertions land on an empty
 bucket, which is why the load-factor check runs only when the bucket was
-already occupied ([tree.cpp:335](tlib/tree.cpp#L335)).
+already occupied ([tree.cpp:344](tlib/tree.cpp#L344)).
 
 ## Invariants and non-goals
 
@@ -733,7 +733,7 @@ no obvious owner to release it. The library does not attempt reclamation during
 a session at all — see §4 for what it does instead, and why that suits a
 compiler.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Origins
 
@@ -1034,7 +1034,7 @@ alpha-equivalent recursive terms land on the same pointer.
 `Node`, its equality, its canonical hash and its predicates. The pointer
 payload exists precisely so that this is rarely necessary.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Origins
 
@@ -1161,7 +1161,7 @@ that never calls `cleanup()`.
 
 ## In the code
 
-Everything hangs on one base class, [garbageable.hh:41](tlib/garbageable.hh#L41):
+Everything hangs on one base class, [garbageable.hh:54](tlib/garbageable.hh#L54):
 
 ```cpp
 class TLIB_API Garbageable {
@@ -1195,7 +1195,7 @@ The registry supports individual deletion mechanically — `operator delete`
 removes the pointer from the list ([garbageable.cpp:95](tlib/garbageable.cpp#L95))
 — but that is a property of the allocator, not a licence. **An interned tree or
 symbol must never be deleted individually.** `CTree::~CTree`
-([tree.cpp:277](tlib/tree.cpp#L277)) deliberately does not remove the node from
+([tree.cpp:276](tlib/tree.cpp#L276)) deliberately does not remove the node from
 the construction table, so deleting one leaves a dangling entry that the next
 lookup will dereference. The same holds for `Symbol` and its table. Individual
 deletion is for ordinary `Garbageable` objects that no table points at — and
@@ -1278,7 +1278,7 @@ destructor, unused by the library itself but still live downstream, where
 Faust's audio types are `Type = P<AudioType>`. Read it as a null-safety
 convenience, never as ownership.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Origins
 
@@ -1424,7 +1424,7 @@ than a flat scanned buffer: one real Faust file has a single node carrying tens
 of thousands of properties, and a linear scan made the whole compilation
 quadratic.
 
-`property<P>` ([property.hh:30](tlib/property.hh#L30)) is the typed façade over
+`property<P>` ([property.hh:31](tlib/property.hh#L31)) is the typed façade over
 that untyped mechanism, and the key line is its constructor:
 
 ```cpp
@@ -1436,11 +1436,21 @@ the key. There is also a named form, `property("some-name")`, for the rarer
 case where two parts of a program must deliberately share one annotation.
 
 For `P = Tree`, `int` and `double` there are specialisations
-([property.hh:73](tlib/property.hh#L73) onwards) that store the value directly
+([property.hh:85](tlib/property.hh#L85) onwards) that store the value directly
 in a node — the value *is* a tree, or fits in one. For any other `P`, the
 generic template boxes the value in a `GarbageablePtr<P>` and stores the
 pointer in a node, which costs an allocation and an indirection but works for
 arbitrary C++ types.
+
+Which pointer, exactly, is a §4 question wearing §5's clothes
+([property.hh:34-38](tlib/property.hh#L34-L38)). What the node holds is the
+**owning wrapper**, never the payload it wraps: the wrapper is the registered
+`Garbageable`, so it is what frees the payload — at `cleanup()`, or
+individually when `clear()` deletes it, which also unregisters it. Storing the
+payload's own address instead would read identically at every use site and leave
+two owners for one object, with the second free arriving at session end. One
+owner per payload is the rule; the indirection through the wrapper is how it is
+kept.
 
 Two refinements are where the engineering shows, and both are worth reading in
 the source because both record what was measured.
@@ -1458,8 +1468,8 @@ was deleted, and `sizeof(CTree)` fell from 120 bytes to 112 across every node
 of every session. A memoisation mechanism is judged by the access pattern it
 serves; when the pattern goes, so should the mechanism.
 
-**`property2`** ([property.hh:157](tlib/property.hh#L157) and its `Tree`
-specialisation at [property.hh:251](tlib/property.hh#L251)) memoises the binary
+**`property2`** ([property.hh:169](tlib/property.hh#L169) and its `Tree`
+specialisation at [property.hh:268](tlib/property.hh#L268)) memoises the binary
 functions described above, and its two long comment blocks are a rare thing in
 a library: a written record of three designs that were tried and rejected on
 measurement.
@@ -1532,7 +1542,7 @@ is only reclaimed at the end of the session, like everything else.
 **None of this is thread-safe.** Properties are ordinary mutable state on
 shared nodes, and §4's single-thread rule covers them.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Origins
 
@@ -1693,11 +1703,11 @@ Tree cons(Tree a, Tree b) { ensureListSymbols(); return tree(gConsSym, a, b); }
 `nil` is a single tree built from a `nil` symbol
 ([list.cpp:135](tlib/list.cpp#L135)), created on first use and — because it is
 session state (§4) — reset by `tlibResetListInternals()` at `cleanup()`. The
-predicates `isNil` and `isList` ([list.cpp:152](tlib/list.cpp#L152)) test the
+predicates `isNil` and `isList` ([list.cpp:153](tlib/list.cpp#L153)) test the
 node and the arity, which is the pattern every client fold uses.
 
 `hd` and `tl` are `branch(0)` and `branch(1)`
-([list.hh:140-148](tlib/list.hh#L140-L148)) — a list is *not* a distinguished
+([list.hh:143-150](tlib/list.hh#L143-L150)) — a list is *not* a distinguished
 type, so accessing its head is accessing a branch.
 
 The set operations ([list.cpp:325](tlib/list.cpp#L325) onwards) are where the
@@ -1739,7 +1749,7 @@ the ancestors of the general rewriting machinery, and `substitute` is one of
 the two functions whose per-call fresh keys produced the pathological node
 carrying tens of thousands of properties that §5 mentioned.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -1924,7 +1934,7 @@ system checks them, and are verified per occurrence by the fold.
 
 The public API is four declarations in
 [symbol.hh:56-83](tlib/symbol.hh#L56-L83) and
-[symbol.hh:167-251](tlib/symbol.hh#L167-L251): the constant
+[symbol.hh:165-280](tlib/symbol.hh#L165-L280): the constant
 `kOpcodesPerSignature`, the `SymbolTag` a fold reads, the `Signature` handle,
 and `getSymbolTag`.
 
@@ -2122,7 +2132,7 @@ different bits overwrites the byte, and no tree built earlier is recomputed. The
 ordering is a discipline the API encourages and does not guarantee, and a late
 change leaves old and new trees silently disagreeing.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -2421,9 +2431,9 @@ symbols are null before initialisation, so a tree built earlier gets the bit
 clear — correct rather than racy, since building a recursive node requires
 passing one of those symbols to `tree()`.
 
-`deBruijn2Sym` ([recursive-tree.cpp:418](tlib/recursive-tree.cpp#L418))
+`deBruijn2Sym` ([recursive-tree.cpp:429](tlib/recursive-tree.cpp#L429))
 requires a closed term and walks it with a memo. Its heart is `contentVar`
-([recursive-tree.cpp:451](tlib/recursive-tree.cpp#L451)):
+([recursive-tree.cpp:462](tlib/recursive-tree.cpp#L462)):
 
 ```cpp
 snprintf(buf, sizeof(buf), "D%016zx", static_cast<size_t>(dbj->canonHash()));
@@ -2434,7 +2444,7 @@ The variable is *named after the content it binds*. A cached variant,
 `deBruijn2SymCached`, stores the result as a property so a repeated conversion
 of the same term costs a lookup.
 
-`sym2deBruijn` ([recursive-tree.cpp:809](tlib/recursive-tree.cpp#L809)) is the
+`sym2deBruijn` ([recursive-tree.cpp:820](tlib/recursive-tree.cpp#L820)) is the
 harder direction and the most engineered function in the library, because
 mutual recursion has to be handled with a single-binder notation. It is
 organised around the **strongly connected components** of the dependency graph
@@ -2449,11 +2459,11 @@ small and shared closed sub-DAGs are converted exactly once.
 Two ways to test alpha-equivalence coexist, and the header is honest about
 which to use ([tree.hh:509-515](tlib/tree.hh#L509-L515)): `areEquiv` converts
 both sides and compares, which is the theorem but is super-linear on large
-nests; `alphaEquiv` ([recursive-tree.cpp:902](tlib/recursive-tree.cpp#L902)) is
+nests; `alphaEquiv` ([recursive-tree.cpp:913](tlib/recursive-tree.cpp#L913)) is
 a pair-memoised walk carrying a variable bijection, linear in distinct pairs,
 and is what validations should call.
 
-Finally `canonicalizeRecNames` ([recursive-tree.cpp:961](tlib/recursive-tree.cpp#L961))
+Finally `canonicalizeRecNames` ([recursive-tree.cpp:972](tlib/recursive-tree.cpp#L972))
 renames a term's recursive groups in dependency order as `R<instance>_<k>`. It
 is *not* a canonical form and [tree.hh:565-574](tlib/tree.hh#L565-L574) says so
 carefully: the instance prefix is fresh per call, so alpha-equivalent inputs
@@ -2508,16 +2518,41 @@ reachable**. The canonical form of this chapter delivers only at the right
 granularity, and the granularity is not given by the syntax.
 
 `normalizeRecGroups` ([recursive-tree.cpp:1264](tlib/recursive-tree.cpp#L1264),
-declared at [tree.hh:577-603](tlib/tree.hh#L577-L603)) rebuilds a term on the
+declared at [tree.hh:577-609](tlib/tree.hh#L577-L609)) rebuilds a term on the
 real structure. Each component becomes one minimal `letrec`, emitted
 dependencies-first — the recursion of the rebuild *is* the topological order. A
 singleton component with no self-reference is not recursive at all, so its
-definition dissolves into a plain expression and the binder disappears.
-Definitions inside a component are ordered by `canonicalTreeLess`, the
-value-derived order of §2, so structural twins agree whatever their history.
-Dead definitions are dropped. And the result goes through the de Bruijn round
-trip, which is where the recursions that have *become* alpha-equivalent collapse
-onto one pointer.
+definition dissolves into a plain expression and the binder disappears. Dead
+definitions are dropped. And the result goes through the de Bruijn round trip,
+which is where the recursions that have *become* alpha-equivalent collapse onto
+one pointer.
+
+Ordering the definitions *inside* a component is where the transformation runs
+into a question TLIB is not entitled to answer. Two members of one knot have to
+be emitted in some order, and `canonicalTreeLess` (§2) settles it by value, so
+that structural twins agree whatever their history. But a consumer emitting
+definitions in list order needs more than an arbitrary agreement: if member $i$
+reads member $j$ **at the current tick**, then $j$ has to come first. That is a
+question about time, and TLIB has no notion of time — nothing tells it that one
+of its branches means "one sample ago".
+
+So the caller tells it. The optional predicate `delayedBranch(parent, k)`
+answers *is branch $k$ of this node read at least one tick late?*, and with it
+the canonical order inside a component is **refined** into a topological order on
+the instantaneous references alone. The flag counts only where the flagged
+branch is itself a projection: a delayed *compound* expression is still computed
+at the current tick — only its result is shifted — so the references inside it
+are instantaneous and get classified on their own account. Given no classifier,
+every reference counts as instantaneous, every real component is then a cycle,
+and the plain canonical order stands: the historical behaviour, and also the
+fallback whenever an instantaneous cycle genuinely appears, such a program being
+delay-free recursive and bound for rejection anyway.
+
+That is the shape of a well-drawn boundary. TLIB does not learn what a delay is;
+it takes a **classifier** from the client who knows, uses it to refine an order
+it could otherwise only pick arbitrarily, and falls back to its previous
+behaviour when nobody supplies one. The knowledge stays where it belongs, and
+the library stays ignorant on purpose.
 
 Two details in it are the kind that look arbitrary and are not. The definitions
 inside a component are ordered — because the de Bruijn round trip unifies
@@ -2546,7 +2581,7 @@ letrecs around a single node of 368 projections, because its feedback matrix
 couples everything to everything.
 
 The conformance test is `checkNormalizeRecGroups`
-([tests.cpp:783](tests.cpp#L783)): a split with a dissolution, twins unified
+([tests.cpp:826](tests.cpp#L826)): a split with a dissolution, twins unified
 across two prisons, a transversal merge, and idempotence — normalising a
 normalised term returns the same pointer.
 
@@ -2572,7 +2607,98 @@ in minimal groups from the outset. That is the natural end of a normalisation:
 not a pass one remembers to call, but a shape nothing is allowed to be built
 outside of.
 
-*Code references verified at `3fbecad`.*
+### Collecting the members nobody reads
+
+A group being a package, it can hold what nobody wants. A definition whose
+projection is never read is not just a wasted line: it drags its entire
+definition along — and any group nested inside that definition — through every
+pass that walks the term.
+
+Deciding which members those are turns out to be an exercise in the graph the
+previous section just drew. On the **projection graph**, call a projection a
+**root** when it has at least one occurrence *outside* every group's
+definitions.
+
+::: definition [Liveness of a member]
+A projection is **alive** when it is reachable from a root in the projection
+graph, and **dead** otherwise.
+:::
+
+Reachability, not presence — and the gap between the two is the whole
+difficulty. Reachability is transitive, so a member read only by dead members
+dies as well; and it treats cycles correctly, so a knot of members referring to
+one another with nothing outside referring to any of them dies as a block, where
+a reference count would keep the knot alive forever. §11 uses those two shapes,
+the *cascade* and the *dead cycle*, as its argument that a single pass cannot
+compute this attribute.
+
+One notion must be sharpened for the cascade to work through nesting. The
+**owner** of an occurrence of $\mathrm{proj}_k(V)$ is the innermost group
+definition containing it — the pair $(W, j)$ such that the occurrence sits in
+definition $j$ of $W$ and no more deeply nested definition contains it; an
+occurrence with no owner at all is **external**. "Contains" is read through the
+RECDEF properties, definitions not being branches. With owners defined that way
+the cascade needs no rule of its own: kill the outer member $j$ and everything
+its definition held, entire inner groups included, goes down with it.
+
+`gcRecGroups` ([recursive-tree.cpp:1500](tlib/recursive-tree.cpp#L1500),
+declared at [tree.hh:611-621](tlib/tree.hh#L611-L621)) performs the collection
+in two phases, and the first is short enough to be a small surprise.
+
+Liveness is computed by `descendFixpoint` (§11) over the **bit** domain, with
+the doors redeclared: here a door leads from a projection node
+$\mathrm{proj}_i(W)$ to the $i$-th definition of $W$
+([recursive-tree.cpp:1502-1523](tlib/recursive-tree.cpp#L1502-L1523)). Two
+consequences fall out at once. The owner rule needs no implementation, because a
+definition can only be entered through its own projection's door. And the bits
+need not be read: over the bit domain the least fixed point **is** the
+reachability, so a member is dead exactly when its projection node was never
+discovered — the code probes the *domain* of the returned map and ignores its
+values. The generic engine's first client uses it by declaring an edge relation
+and then throwing the attribute away.
+
+The second phase is surgery, and it answers to an invariant this tour has been
+accumulating since §2: **an untouched subtree must come back pointer-identical**.
+So the rebuild first computes the exact **dirty** set — the nodes from which a
+shrinking group is reachable through live containment edges
+([recursive-tree.cpp:1567-1625](tlib/recursive-tree.cpp#L1567-L1625)) — and the
+memoised rebuild returns its input for everything outside it
+([recursive-tree.cpp:1630](tlib/recursive-tree.cpp#L1630)). When no group
+anywhere loses a member, the root itself comes back unchanged
+([recursive-tree.cpp:1564](tlib/recursive-tree.cpp#L1564)).
+
+A rebuilt group compacts: survivors keep their relative order and are renumbered
+onto $0..m-1$, so each surviving $\mathrm{proj}_j(W)$ becomes
+$\mathrm{proj}_{\sigma_W(j)}(W')$, inside the definitions and outside alike.
+The renaming is not a design choice but a consequence of immutability: the group
+is rebuilt, therefore it is a **new** node with a fresh variable, therefore every
+reference to it has to be rewritten in any case. And one line of the rebuild is
+this chapter's own trick applied by its author — the fresh SYMREC node is created
+**before** its body exists
+([recursive-tree.cpp:1648](tlib/recursive-tree.cpp#L1648)), because the group is
+its own reference and its definitions must have something to point at.
+
+Why a separate primitive, when `normalizeRecGroups` already drops the
+definitions it never discovers? Because the two answer to different callers.
+Normalisation *restructures*: it splits, merges, dissolves and reunifies through
+the de Bruijn round trip. That is what a caller wants once, and precisely what a
+caller does not want after a small local rewrite. The case that motivated the
+split is a client dissolving **delayed aliases** — definitions that merely shift
+another member. Recognising a shift, and folding two shifts into one, are
+statements about *that client's* language and not about TLIB's terms, so the
+client rewrites the references itself and then wants the members it has just
+orphaned collected, with its groups left alone. `gcRecGroups` is the cleanup
+with no opinion about structure.
+
+The conformance test is `checkGcRecGroups`
+([tests.cpp:1754](tests.cpp#L1754)), and its cases are the definition's corners:
+a direct removal with renumbering, the cascade, the dead cycle, the *live* cycle
+where a single external reference saves both members, and a nested group living
+inside a member that dies. Two of them also pin the identity claim: the live
+cycle returns its input pointer, and collecting an already-collected term
+returns the same pointer again.
+
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -2616,6 +2742,17 @@ properties.
 syntax; the semantics of the fixed point — least, greatest, or an iteration
 that must be made to converge — is the client's, and §10 is the machinery for
 computing it.
+
+**Normalisation never reads a term for its meaning, and dissolving delayed
+aliases is the boundary case.** A member whose definition merely shifts another
+member is redundant, and removing it is worth doing — but recognising a shift,
+and folding two shifts into one, are claims about a *client's* operators, not
+about TLIB's terms. So `normalizeRecGroups` does not do it. The division is
+explicit and it is the reason `gcRecGroups` exists as its own primitive: the
+client performs the semantic act and rewrites the references, TLIB collects
+whatever that leaves unreachable. The same line is drawn one notch lower by
+`delayedBranch`, which lets a client contribute *which branches shift time*
+without TLIB ever learning what time is.
 
 ## Origins
 
@@ -3012,7 +3149,7 @@ by the original while building from rewritten children, and exposes its memo so
 that nested arguments can be matched with their transforms. The full
 specification of both is [REWRITE-SPEC.md](REWRITE-SPEC.md).
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -3315,7 +3452,7 @@ permanent. Only values that depend on the component being iterated are
 from `RecPlan` ([tree.hh:539](tlib/tree.hh#L539)), memoised one per root per
 session, so repeated analyses of the same term share one Tarjan run.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -3366,6 +3503,17 @@ Bruijn one.
 **Nothing survives a rewrite.** §9's rule applies here too: a rewritten term is
 made of new nodes, so its attributes must be recomputed — including re-running
 this fixed point.
+
+**This computes fixed points in the *synthesized* direction, and it is no longer
+the library's only fixed point.** §11 has one for descending attributes, and the
+division between them is by hypothesis rather than by direction. Where the
+domain has finite height and the equations are monotone, termination is free,
+the answer is the least fixed point and it does not depend on the visiting
+order — that is §11's engine, and it needs no widening, no cap and no
+certificate. Everything here exists because the interval domain has none of
+those properties: unbounded chains force a widening, the widening costs the
+least fixed point, and recovering precision then costs a narrowing. Read in that
+order, this chapter is what one pays for leaving a finite lattice.
 
 ## Origins
 
@@ -3426,6 +3574,11 @@ never had to ask for:
   receiving, which is the bug every hand-written descending pass eventually
   writes once.
 
+Those three suffice for as long as the descent can be *ordered*, which is to say
+for as long as the graph is acyclic. Recursion is exactly what takes that away,
+and the last third of this chapter is about what replaces an order when there
+is none to be had.
+
 ## Its role in TLIB
 
 It closes a gap this tour has been carrying since §5, and closes it in the way
@@ -3445,6 +3598,15 @@ so keying it by node would be the error §5 warns against — and concretely, tw
 computations with different seeds or joins would collide on the same key. The
 chapter that introduced properties is also the one that forbids using them
 here.
+
+The module offers two entry points, and their relation is the story this chapter
+tells. `descendAttribute` is the original: one topological pass, exact for the
+attributes whose recursive flow can be settled in advance.
+`descendFixpoint` is its generalisation to those whose cannot, and it
+turns out to *contain* the first — the one-pass behaviour is what the general
+engine does on an acyclic instance, not a separate mode it is asked for. The
+older function stays because a caller who knows one pass is enough should be
+able to say so, and pay for nothing else.
 
 ## More precisely
 
@@ -3476,8 +3638,10 @@ answers two; a minimum-depth analysis takes the smaller and answers one. Same
 graph, same question shape, different answers — because the join is part of the
 question, not an implementation detail.
 
-What TLIB computes is therefore the solution of one system, written once here
-and used for the rest of the chapter:
+What a one-pass descent computes is therefore the solution of one system, worth
+writing out because everything up to this chapter's last section reads off it —
+and because its last section is what happens when one term of it is allowed to
+vary:
 
 ```math
 a(n) = \bigsqcup\Big(\, S(n)\ ∪\ \big\{\, \mathrm{contrib}(p, i, a(p))\ \big|\
@@ -3598,15 +3762,128 @@ qualification the previous section earned: what is counted is paths *within*
 each absorbing boundary, never paths of the recursive unfolding, of which there
 are infinitely many.
 
-**C, true fixed points**, where the body would see the join of its own entries:
-out of scope here. That is where the choice rejected above lives, and for a
-join like $+$ there is no finite least solution to reach anyway — a node inside
-a recursion occurs unboundedly often in the unfolding. §10 serves the
-synthesized counterpart.
+**C, true fixed points**, where the body must see the join of its own entries.
+That is where the choice rejected above lives, and for a join like $+$ over the
+naturals the refusal is well founded: there is no finite least solution to
+reach, a node inside a recursion occurring unboundedly often in the unfolding.
+But *no finite solution for that domain* is not *no finite solution*, and the
+rest of this chapter is the attribute that showed the difference.
+
+### The attribute that no single pass can compute
+
+Ask of a mutually recursive group a question its own users ask constantly:
+**which of its members are actually used?** A group is a syntactic package
+(§8), so nothing prevents it from carrying a definition nobody reads — and
+removing those is worth real money, since a dead member drags its whole
+definition, and any group nested inside it, along.
+
+Two small terms show why one pass cannot answer.
+
+```text
+letrec {                              letrec {
+  r = f(t)    ← nobody reads r          x = f(y)
+  t = g(0)    ← only r reads t          y = g(x)   ← and nothing outside
+}                                     }               reads x or y
+
+        the cascade                           the dead cycle
+```
+
+Seed the descent from the mere *presence* of an occurrence and one pass computes
+"is mentioned somewhere". In the cascade that answer keeps `t`, which only a
+dead member reads. In the dead cycle it keeps both `x` and `y` forever, each
+testifying to the other's life. The criterion wanted is not *is it mentioned*
+but **is it reachable from a use outside the group**, and reachability across a
+cycle is a least fixed point, not a scan.
+
+Now look at what that attribute actually is. Liveness is a **bit**; a member's
+bit is the **or** of the bits arriving on it; and the bit is transmitted to what
+the member's definition reads. A monotone system over a lattice of height one —
+and monotonicity is the licence. With it, the circularity that the constancy
+contract was invented to avoid becomes an ordinary Kleene ascent (§10), which on
+a finite-height lattice terminates on its own, with no widening to invent and no
+cap to tune.
+
+The second observation is the one that settled the design, because it is about
+the mechanism's *founding* client. Occurrence counting is a fixed point too, and
+TLIB's main client has been approximating it all along: `OccMarkup::incOcc`
+descends into the subtrees on the **first visit only**, so a revisit increments
+the node's own counters without re-propagating the new context to its children.
+Through sharing and through recursive groups, a child's context therefore
+reflects the first visit rather than the combination of all of them — the same
+one-pass approximation the two witnesses above expose, in the analysis that
+motivated the whole chapter.
+
+So regime C is not a third mode to be added beside the other two. It is the
+general case, and stating it makes the other two disappear into it.
+
+::: definition [The general model]
+A finite directed graph. Attributes live on nodes, and each node carries a local
+equation over the **list** of values arriving on its incoming edges:
+
+```math
+a(n) = F_n\big(\big[\,\mathrm{contrib}(p, i, a(p)) \mid p \xrightarrow{\ i\ } n
+\,\big]\big)
+```
+
+Two conditions are asked of an instance: every $F_n$ is **monotone** in each of
+its arguments, and the domain has **finite height** $h$ on the chains actually
+reached.
+:::
+
+A list, not a join — and that is where this goes one step past the textbook
+formulation. An equation handed the individual contributions may **count** them;
+an equation handed only their join cannot. Liveness ignores the distinction, its
+$F_n$ being an **or**; occurrence counting, whose domain carries a saturating
+sum, is the instance that needs it.
+
+Those two conditions buy three theorems
+([descend.hh:232-241](tlib/descend.hh#L232-L241)):
+
+- the least fixed point **exists** — Knaster-Tarski, the same theorem that gives
+  §8's recursive terms their meaning;
+- any **fair** iteration from $\bot$ reaches it, in at most $h \times |E|$
+  re-evaluations;
+- the result is **canonical**, independent of the order in which nodes are
+  visited. The proof is three lines: starting from $\bot$, monotonicity keeps
+  every intermediate state below the least fixed point; the final state, reached
+  when nothing remains scheduled, satisfies every equation and is therefore a
+  fixed point; and a fixed point reached from below is the least one.
+
+At which point the notion this chapter was built on **dissolves**. Under the
+general model a door is not an edge with a special rule and a value of its own;
+it is an ordinary edge that merely happens to close a cycle. What `descend`
+computes is a dataflow analysis over the graph of references, and the tree shape
+was an accident of the representation.
+
+The regimes survive the dissolution, in a better position than they held: they
+stop being modes of an API and become **convergence theorems**. *A door whose
+input cannot grow is never fired twice* — that is A and B, now observed by the
+engine rather than declared to it. One descent, three speeds one can measure:
+a single pass on an acyclic instance, linear for a bit, bounded by the height in
+general.
+
+One choice inside the engine is not a detail, because it is what makes the
+non-idempotent domains work. The iteration is **recompute-and-compare**: a
+scheduled node has its attribute rebuilt from the current values of its parents
+and propagated only if it changed. The tempting alternative — accumulate the
+new contribution into the value already there — is correct exactly when the
+equation is idempotent, which a join is and a saturating sum is not. Redescend
+into a shared subterm twice and an accumulating count counts it twice; a
+recomputed one never does. The idempotent shortcut is a real optimisation and
+is deliberately not taken: one engine, one semantics, until something is
+measured ([descend.hh:242-247](tlib/descend.hh#L242-L247)).
+
+The boundary with §10 becomes clean at last. Finite height and monotonicity buy
+termination outright and make the answer canonical; where the domain has
+unbounded chains, or the equations are not monotone, none of that is available
+and one must invent a widening and settle for a post-fixed point. That is
+precisely what §10 is for. The two are the same theorem met under different
+hypotheses — a better way to tell them apart than the direction they run in.
 
 ## In the code
 
-[descend.hh](tlib/descend.hh) is one function of about a hundred lines:
+[descend.hh](tlib/descend.hh) is two functions. The first is the one-pass
+descent, about a hundred lines:
 
 ```cpp
 template <typename A>
@@ -3627,12 +3904,12 @@ Note what is *not* a parameter. The traversal is not told how to find a node's
 children; TLIB knows where its own doors are. Recursion is a fact about the
 representation, not a detail to be configured by the caller.
 
-**Phase one** ([descend.hh:136-167](tlib/descend.hh#L136-L167)) discovers the
+**Phase one** ([descend.hh:139-170](tlib/descend.hh#L139-L170)) discovers the
 extended graph and counts, for every node, its incoming **branch** edges only.
 Door edges are deliberately not counted: they carry a constant, so they can
 fire unconditionally.
 
-**Phase two** ([descend.hh:169-207](tlib/descend.hh#L169-L207)) is a single
+**Phase two** ([descend.hh:172-210](tlib/descend.hh#L172-L210)) is a single
 global Kahn descent. The doors fire first, then a node becomes ready when every
 incoming branch edge has fired:
 
@@ -3651,7 +3928,7 @@ body waits for *both* before descending, which a traversal that stops at first
 visit would not do.
 
 And the theorem gets an executable witness
-([descend.hh:208-210](tlib/descend.hh#L208-L210)):
+([descend.hh:211-213](tlib/descend.hh#L211-L213)):
 
 ```cpp
 TLIB_ASSERT(processed == pending.size());
@@ -3661,7 +3938,7 @@ If some cycle avoided the doors, the nodes on it would keep a positive count,
 never become ready, and this line would fail. The argument that the descent
 terminates is not left in a comment; it is checked on every run.
 
-The conformance test is `checkDescend` in [tests.cpp:1560](tests.cpp#L1560),
+The conformance test is `checkDescend` in [tests.cpp:1588](tests.cpp#L1588),
 and its cases are chosen so that each *can* fail. On the shared DAG
 `R(S(x, x), x)` the path count matches the hand-computed truth — `x` is
 reached by three paths, `s` and `r` by one — and a *minimum* join computes
@@ -3676,7 +3953,90 @@ the test could not fail: the internal edge pinned the accumulator whatever the
 external sites did. A test that cannot fail is not a weak test; it is not a
 test — and this chapter has now been corrected twice by that observation.
 
-*Code references verified at `3fbecad`.*
+### The unified engine
+
+The second function is `descendFixpoint`
+([descend.hh:265](tlib/descend.hh#L265)), and reading its signature against the
+first one gives the whole design:
+
+```cpp
+enum class DescendStrategy { kReversePostorder, kFifo, kLifo };
+
+template <typename A>
+std::map<Tree, A, treeorder> descendFixpoint(
+    Tree root, const A& bottom, const A& seed,
+    std::function<A(Tree, int, const A&)>         contrib,
+    std::function<A(Tree, const std::vector<A>&)> combine,
+    std::function<void(Tree, std::vector<Tree>&)> doorTargets = nullptr,
+    std::function<A(Tree, const A&)>              doorContrib = nullptr,
+    DescendStrategy strategy = DescendStrategy::kReversePostorder);
+```
+
+Three differences, each one a paragraph of the section above turned into a type.
+`join` has become **`combine`**, which receives the whole list of incoming
+contributions and may therefore count them. `doorSeed`, a function of the door
+node *alone*, has become **`doorContrib`**, a function of the door node **and
+its current attribute** — the constancy contract, dropped: this is the door that
+reads what reaches it. And **`doorTargets`** makes the extra edges a parameter
+rather than a fact about TLIB; the default is still the RECDEF edge of a
+symbolic recursive node ([descend.hh:273-281](tlib/descend.hh#L273-L281)), but a
+caller may declare its own, which is exactly the dissolution of the door made
+operational — a graph analyser where there was a tree traversal. `bottom` joins
+the parameter list because an iteration from below needs a place to start.
+
+Phase one ([descend.hh:286-333](tlib/descend.hh#L286-L333)) discovers the
+extended graph and records, per node, its incoming edges and its successors —
+where the one-pass version counted in-degrees, this one needs to walk *back* to
+a node's inputs on every recomputation. The last thing it does is sort each
+incoming list ([descend.hh:322-332](tlib/descend.hh#L322-L332)) by the parent's
+`treeorder` and then the branch index, with the root's seed first: §2's
+determinism requirement reaching all the way into the equations, so that a
+`combine` which is not commutative still sees a reproducible list.
+
+Phase two ([descend.hh:335-451](tlib/descend.hh#L335-L451)) is the chaotic
+iteration, and its inner loop is four lines
+([descend.hh:439-451](tlib/descend.hh#L439-L451)):
+
+```cpp
+Tree n = pop();
+A    v = recompute(n);
+if (!(v == attr.at(n))) {
+    attr.at(n) = v;
+    for (Tree s : successors) push(s);
+}
+```
+
+Recompute, compare, propagate the change — the whole semantics of the previous
+section, with nothing accumulated anywhere.
+
+The strategy is where a design decision hides in what looks like a tuning knob.
+The default visits nodes in **reverse postorder** of the extended graph
+([descend.hh:353-386](tlib/descend.hh#L353-L386)), and the point of that choice
+is what it does on an acyclic instance: the first sweep reaches the fixed point
+and nothing is ever rescheduled. The one-pass regimes are the *emergent
+behaviour of the default*, not a mode. The two other strategies exist for one
+reason that is not performance — every member of the set is fair, so all three
+must agree, and making them disagree is a test. Knaster-Tarski's canonicity
+becomes a regression check rather than a remark, and, as the header notes, it is
+also the detector for an $F_n$ that is accidentally non-monotone: it breaks
+canonicity before it breaks anything else, and this is the one place the
+breakage is visible.
+
+The conformance test is `checkDescendFixpoint`
+([tests.cpp:1653](tests.cpp#L1653)), and its four cases are the four claims of
+this section, in order. A diamond counts paths with a plain sum — the equation a
+join-only engine could not express — and the shared node comes out at exactly 2;
+a counter on `combine` then asserts `evals == 4`, one recomputation per node,
+which is the one-sweep property stated as a number instead of as a hope.
+Regime A is checked to *embed*: with a constant `doorContrib`, the engine
+reproduces `descendAttribute`'s answer exactly on the same recursive term.
+A saturating count then climbs through the cycle to its ceiling and stops,
+which is the $+$-has-no-finite-solution case
+tamed by a finite-height domain. And the same computation run under all three
+strategies must give strictly equal maps — the canonicity theorem as a
+regression test.
+
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -3685,35 +4045,58 @@ function of the context, not of the node, so §5's rule excludes it from the
 node's property list. Two computations with different seeds or joins would
 otherwise overwrite each other under one key.
 
-**The join must be associative and commutative.** Contributions from several
-parents arrive in an unspecified order and are folded as they come, so anything
-order-sensitive gives an unspecified answer. Sum, minimum and lattice joins all
-qualify. Nothing checks it — the requirement is stated in the header
-([descend.hh:21-23](tlib/descend.hh#L21-L23)) and nowhere enforced.
+**`descendAttribute`'s join must be associative and commutative.** Contributions
+from several parents arrive in an unspecified order and are folded as they come,
+so anything order-sensitive gives an unspecified answer. Sum, minimum and
+lattice joins all qualify. Nothing checks it — the requirement is stated in the
+header ([descend.hh:21-23](tlib/descend.hh#L21-L23)) and nowhere enforced.
+`descendFixpoint` does not need it, and that is not laxity: it hands `combine`
+an explicitly ordered list, so an order-sensitive equation is well defined
+there — which is what a counting domain requires.
 
-**A door transmits a constant — the contract, not a theorem.** What crosses
-into a definition may be computed from the door node, never from the door's
-context. Sharing settles the weaker half on its own: one definition, many use
-sites, so no *particular* site may colour the body. Whether all of them jointly
-could is a fixed-point question, and answering it is what this mechanism
-declines to do.
+**In `descendAttribute`, a door transmits a constant — the contract, not a
+theorem.** What crosses into a definition may be computed from the door node,
+never from the door's context. Sharing settles the weaker half on its own: one
+definition, many use sites, so no *particular* site may colour the body.
+Whether all of them jointly could is a fixed-point question, and that function
+declines to answer it. `descendFixpoint` is the answer, at the price stated in
+the next paragraph.
 
-**The ordering invariant has two parts, not one with an exception.** Ordinary
-branch edges follow Kahn order: a node's join is complete before its branches
-are processed. Door edges fire *outside* that order, before the descent begins,
-and may do so precisely because their value is $\mathrm{doorSeed}(W)$ and reads
-no accumulator. So a door enters its definition while $a(W)$ is still
-incomplete, without ever exposing an incomplete value to it. What is never fed
-back through a door is $a(W)$ itself.
+**`descendFixpoint` asks for monotone equations over a domain of finite height,
+and checks neither.** Both conditions are load-bearing: finite height is what
+makes the iteration terminate at all, monotonicity is what makes its result the
+*least* fixed point and independent of the visiting order. There is no iteration
+cap to catch a violation: a non-monotone `combine` either settles on some fixed
+point that depends on the strategy, or oscillates and never returns at all —
+where §10, facing the same risk, answers with `top`. The cross-strategy test is
+the only place the first failure becomes visible, which is the argument for
+keeping it.
+
+**In `descendAttribute` the ordering invariant has two parts, not one with an
+exception.** Ordinary branch edges follow Kahn order: a node's join is complete
+before its branches are processed. Door edges fire *outside* that order, before
+the descent begins, and may do so precisely because their value is
+$\mathrm{doorSeed}(W)$ and reads no accumulator. So a door enters its definition
+while $a(W)$ is still incomplete, without ever exposing an incomplete value to
+it. What is never fed back through a door is $a(W)$ itself. In
+`descendFixpoint` there is no such invariant to keep, and no order to respect:
+a value that was incomplete when read is simply read again later.
 
 **Only nodes reachable from the root appear in the result.** The map is not a
 total function on the session's trees, and `at()` on an unreached node throws.
 
-**Regime C is out of scope.** If an attribute genuinely needs the body to see
-the join of its own entries, this is not the tool: that is a fixed point, it
-needs a lattice and a termination argument, and for a join like $+$ no finite
-least solution exists at all. §10 is the machinery for the synthesized
-direction; nothing here iterates.
+**Regime C is not a mode, and A and B are not modes either.** There is no flag
+selecting between them. A caller declares a domain and a set of equations; the
+engine iterates until nothing changes, which on an acyclic instance is one
+sweep. The regimes name observable rates of convergence, not configurations —
+which also means an instance that was one-pass can silently stop being one when
+its equations change, and only a measurement will say so.
+
+**Regime C does not make every attribute computable.** Finite height is a real
+restriction, and the attribute that motivated this chapter falls outside it:
+counting the paths of a recursive unfolding with an unbounded $+$ still has no
+finite least solution. What the engine offers is a domain in which to say so —
+saturate the count, and the same equations converge.
 
 **Recursive descent is defined on symbolic terms only.** A de Bruijn term is
 traversed as its finite syntactic DAG — its body is an ordinary branch, its
@@ -3724,11 +4107,13 @@ questions. The division of labour is a fair one: the de Bruijn form is how
 recursion is *canonicalised*, the symbolic form is where the doors an inherited
 attribute needs actually exist.
 
-**A linear number of steps, not a linear cost.** One discovery pass and one
-descent, each edge of the extended graph fired exactly once — but the tables
-are `std::map`, so every access costs a logarithm and the whole is
-$O((V + E)\log V)$. There is no iteration and no parameter to tune:
-`descendAttribute` either applies to an attribute or does not.
+**A linear number of steps, not a linear cost.** `descendAttribute` runs one
+discovery pass and one descent, each edge of the extended graph fired exactly
+once — but the tables are `std::map`, so every access costs a logarithm and the
+whole is $O((V + E)\log V)$. `descendFixpoint` multiplies the step count by the
+height of the domain and nothing else: $O(h(V + E)\log V)$, with $h = 1$ for a
+bit, where the computation *is* a reachability and the cost is the one-pass
+cost.
 
 ## Origins
 
@@ -3744,6 +4129,25 @@ parents-before-children order with its readiness counters is Kahn's topological
 sort (*Topological sorting of large networks*, CACM 5(11), 1962) — the counter
 `pending` is Kahn's in-degree, and the fact that a node is emitted only when it
 reaches zero is what carries the ordering invariant.
+
+The general engine is older than it looks, and belongs to the same literature
+one step further on. Gary Kildall's *A unified approach to global program
+optimization* (POPL, 1973) is the worklist algorithm — schedule a node,
+recompute it, reschedule its successors on change — and John Kam and Jeffrey
+Ullman's *Monotone data flow analysis frameworks* (Acta Informatica 7, 1977)
+supply exactly the two hypotheses of this chapter, monotonicity and a bounded
+lattice, together with the bound on the number of re-evaluations. The
+independence of the result from the visiting order is what the Cousots call
+**chaotic iteration**, in the 1977 paper §10 already cites. The one thing the
+formulation here does not take from that literature is the shape of the local
+equation: a dataflow framework composes its inputs with a join, where a node
+in `descendFixpoint` receives the list of them and may count.
+
+Reading the chapter's history backwards, the joke is that the mechanism arrived
+as a tree traversal with a special rule for recursion, and ended as a dataflow
+analysis on a graph. The special rule was never a property of recursion; it was
+a way of avoiding a fixed point. Once the fixed point is affordable, the rule
+has nothing left to do.
 
 The instance that motivated the whole thing takes us back to §2's origins:
 counting occurrences to decide what deserves a name is the code generator's
@@ -3841,7 +4245,7 @@ the join, $c_1 ∨ c_2 = c_1$ says $c_2 ⊑ c_1$. So:
 
 — it holds when the **second** argument is the stronger condition. The test
 suite pins exactly that, checking `dnfLess(a, a ∧ b)`
-([tests.cpp:1100](tests.cpp#L1100)): $a ∧ b$ implies $a$. The header comment
+([tests.cpp:1209](tests.cpp#L1209)): $a ∧ b$ implies $a$. The header comment
 ([dcond.hh:37](tlib/dcond.hh#L37)) stated the converse until recently, and
 this chapter reproduced the error faithfully; the test is what settled it.
 
@@ -3876,7 +4280,7 @@ count to zero, and a `getCount` that read the property back. Forty lines, and
 the traversal recursed into every branch with no memo of its own: that is where
 the exponent came from.
 
-*Code references verified at `3fbecad`.*
+*Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
@@ -3979,7 +4383,7 @@ which is where TLIB stops.
 | 8 | Recursion is a finite term denoting an infinite tree, with the cycle in the properties, never in the branches. |
 | 9 | Rewriting is a fold into the syntax algebra, memoised for sharing and renaming for immutability. |
 | 10 | Attributes over recursion are computed by iteration in a lattice, with widening for termination. |
-| 11 | What a node inherits is a function of its contexts, so sharing makes it a question rather than a lookup. |
+| 11 | What a node inherits is a function of its contexts, so sharing turns a lookup into a dataflow problem over the graph. |
 | 12 | The optional modules add nothing to the core, which is the point. |
 | 13 | Everything above is machinery; the meaning lives in the client's algebras. |
 
