@@ -28,7 +28,7 @@ library has the shape it has.
 - **Rewriting** — bottom-up transformation of shared and cyclic terms, where memoisation becomes a termination argument.
 - **Fixed points** — computing attributes over recursive terms: Kleene ascent, widening and narrowing.
 - **Descending attributes** — the other direction: what a node inherits from its contexts, and why sharing makes that a question rather than a lookup.
-- **Optional modules** — boolean conditions, and a module that no longer exists.
+- **Optional modules** — boolean conditions, and what it takes for a module to stay.
 - **The stack, in one picture** — what TLIB is, and what it deliberately never knows.
 :::
 
@@ -4160,13 +4160,11 @@ shared; this one asks how much.
 
 ## The idea
 
-One small module ships with TLIB, and until recently there were two. Nothing in
-the core depends on them: remove either and the library still builds. They are
-worth a short chapter for a reason that has nothing to do with their size —
-**they are the proof that the preceding chapters are enough**, being written
-entirely in terms of trees, lists, sets and properties, with no new mechanism,
-no new node kind and no privileged access. The one that left proves it twice
-over, as the end of this chapter explains.
+One small module ships with TLIB, and nothing in the core depends on it: remove
+it and the library still builds. It is worth a short chapter for a reason that
+has nothing to do with its size — **it is the proof that the preceding chapters
+are enough**, being written entirely in terms of trees, lists, sets and
+properties, with no new mechanism, no new node kind and no privileged access.
 
 **`dcond`** represents boolean conditions in disjunctive or conjunctive normal
 form. A DNF condition is a *set of sets* of trees: the inner sets are
@@ -4175,15 +4173,9 @@ ordered and duplicate-free and §2 makes equal terms one pointer, two conditions
 with the same clauses are the same pointer — so comparing conditions becomes a
 set operation rather than a proof search.
 
-**`occur`** counted, for every subtree of a given root, how many times it
-occurred — the natural question to ask of a DAG before generating code, since a
-subterm used once can be inlined while one used many times deserves a name. It
-is worth a paragraph here although it no longer exists, because its removal
-says something the rest of the chapter cannot.
-
 ## Its role in TLIB
 
-Their role is deliberately marginal, and saying so is the point.
+Its role is deliberately marginal, and saying so is the point.
 
 `dcond` is, in the vocabulary of §1, **another algebra** — a boolean one, whose
 carrier happens to be `Tree`. It illustrates that the universal carrier is not
@@ -4191,34 +4183,9 @@ limited to syntax: normal forms of logical formulae live in the same space as
 signal terms, share the same table, and can be memoised on nodes with the same
 `property`.
 
-`occur` was an application of §5 with one twist worth copying. Occurrence counts
-are meaningless without a root — the same subtree occurs a different number of
-times in different terms — so the count could not simply be *the* count of a
-node. It therefore minted a **fresh property key per root**, which is §3's
-gensym used to parameterise an annotation. The pattern generalises: whenever a
-fact is a function of a node *and* something else, either the key or the table
-has to carry that something else, exactly as §5's `property2` does for a second
-tree. That idea outlives the module.
-
-The module itself did not, and the way it went is the useful part. §11's descent
-computes the same numbers as the special case where the contribution is the
-identity and the join is addition — but by joining over the finitely many
-incoming *edges* rather than by walking one path per occurrence. On a shared DAG
-of 21 nodes denoting a term with $2^{20}$ leaves, both return 1 048 576 and the
-dedicated traversal takes some eighty thousand times longer, because it was
-exponential in exactly the sharing §2 exists to create. It also stopped at
-recursive nodes, where the general mechanism crosses them.
-
-When the module was finally looked at, its only consumer turned out to construct
-it and never read it: the one call to `getCount` in the compiler sat inside a
-comment. A potentially exponential traversal, run on every diagram, for a value
-nobody wanted. So `occur` was not migrated, it was deleted.
-
-Neither module is on the path of any other chapter. They were here because a
-library that claims its core is sufficient should be able to point at things
-built on top of it without extending it — and the strongest form of that claim
-is what just happened to one of them: a general mechanism, properly posed, made
-the specialised brick that preceded it redundant, and the brick left.
+It is on no other chapter's path. It is here because a library that claims its
+core is sufficient should be able to point at something built on top of that
+core without extending it.
 
 ## More precisely
 
@@ -4243,24 +4210,12 @@ the join, $c_1 ∨ c_2 = c_1$ says $c_2 ⊑ c_1$. So:
 \mathrm{dnfLess}(c_1, c_2) \iff c_2 ⟹ c_1
 ```
 
-— it holds when the **second** argument is the stronger condition. The test
-suite pins exactly that, checking `dnfLess(a, a ∧ b)`
-([tests.cpp:1209](tests.cpp#L1209)): $a ∧ b$ implies $a$. The header comment
-([dcond.hh:37](tlib/dcond.hh#L37)) stated the converse until recently, and
-this chapter reproduced the error faithfully; the test is what settled it.
-
-The quantity `occur` computed is a function of *two* arguments — a subtree and
-the root it is counted in:
-
-```math
-\mathrm{count}_{r}(t) = \#\{\, \text{positions } p ≠ ε \text{ in } r : r|_p = t \,\}
-```
-
-— the number of positions of $r$ at which $t$ appears, the empty position
-excluded so that the root counts zero. It is a count over the *unfolded term*,
-not over the DAG: a subterm shared by two parents occurs twice, which is
-exactly what a code generator needs to know. §11 computes it without visiting
-those positions.
+— it holds when the **second** argument is the stronger condition, and the
+header now says so ([dcond.hh:37-39](tlib/dcond.hh#L37-L39)), pointing at the
+assertion that settles it: `dnfLess(a, a ∧ b)`
+([tests.cpp:1209](tests.cpp#L1209)), since $a ∧ b$ implies $a$. The comment
+stated the converse for years, and a reader who trusts comments over tests —
+this chapter did, once — reproduces the error rather than finding it.
 
 ## In the code
 
@@ -4274,18 +4229,12 @@ here !!!!"*), `dnfAnd` carries an *"A REVOIR !!!"*
 commutativity and one ordering example rather than an algebraic
 specification.
 
-`occur` was one small class — a fresh property key per root, a constructor that
-walked the tree incrementing a count per node and then reset the root's own
-count to zero, and a `getCount` that read the property back. Forty lines, and
-the traversal recursed into every branch with no memo of its own: that is where
-the exponent came from.
-
 *Code references verified at `6c7040b`.*
 
 ## Invariants and non-goals
 
-**Neither module is required.** Nothing in `tree`, `node`, `symbol`, `list`,
-`property`, `recursive-tree`, `rewrite` or `fixpoint` refers to them.
+**The module is not required.** Nothing in `tree`, `node`, `symbol`, `list`,
+`property`, `recursive-tree`, `rewrite`, `fixpoint` or `descend` refers to it.
 
 **`dcond` assumes its inputs are in normal form**, as `setUnion` assumes
 canonical sets (§6). It also does not memoise, which its own header admits.
@@ -4298,12 +4247,13 @@ the boundary cases should pin them down first. This chapter describes the
 module as it is, not as a specified algebra.
 
 **A specialised module earns its place only while the general one is missing.**
-`occur` was written before there was any way to express a descending attribute,
-and it was right to exist then. Once §11 arrived it computed the same numbers
-faster, over a wider domain, from a contribution and a join two lines long. The
-lesson is not that the module was bad; it is that the question "what does this
-still buy?" has to be asked of a specialised brick every time a general
-mechanism lands near it.
+TLIB shipped a second optional module until recently — `occur`, a dedicated
+occurrence counter written before there was any way to express a descending
+attribute. §11's descent came to compute the same numbers faster and over a
+wider domain, from a contribution and a join two lines long, so the module was
+deleted rather than migrated. The lesson is not that it was a bad module; it is
+that the question *what does this still buy?* has to be asked of a specialised
+brick every time a general mechanism lands near it.
 
 ## Origins
 
@@ -4312,11 +4262,6 @@ observation that matters here is the one §2's origins already made about BDDs �
 a canonical representation plus maximal sharing turns logical equivalence into
 pointer equality. `dcond` uses the weaker, simpler device of DNF over canonical
 sets, which is adequate when the formulae are small and the operations rare.
-
-Counting occurrences to decide what deserves a name is **common subexpression
-elimination** seen from the code generator's side, and takes us back to Ershov
-(1958), cited in §2: the same hash table that finds a repeated subexpression is
-what makes counting its uses meaningful.
 
 
 # The stack, in one picture
@@ -4384,7 +4329,7 @@ which is where TLIB stops.
 | 9 | Rewriting is a fold into the syntax algebra, memoised for sharing and renaming for immutability. |
 | 10 | Attributes over recursion are computed by iteration in a lattice, with widening for termination. |
 | 11 | What a node inherits is a function of its contexts, so sharing turns a lookup into a dataflow problem over the graph. |
-| 12 | The optional modules add nothing to the core, which is the point. |
+| 12 | The optional module adds nothing to the core, which is the point. |
 | 13 | Everything above is machinery; the meaning lives in the client's algebras. |
 
 ## What TLIB deliberately never knows
