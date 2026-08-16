@@ -1535,6 +1535,10 @@ bool checkLifecycle()
     (void)before;  // any use of 'before' after cleanup() would be invalid
 
     tlib::cleanup();
+    // a new init() after cleanup() is legal (the compiler's pairing) ; only
+    // a second init() over a LIVE population asserts -- untestable here, the
+    // assert is the test
+    tlib::init();
 
     // a fresh session works, including the library-owned symbols (nil, rec...)
     CHECK(isNil(nil()));
