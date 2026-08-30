@@ -934,6 +934,25 @@ bool checkRecImmutability()
     }
     CHECK(caught);
 
+    // d) the MIGRATION AFFORDANCE (tlib::setMutableRecDefinitions) restores
+    // the historical overwrite semantics -- redefinition and erasure pass --
+    // and turning it back off restores the immutable contract.
+    tlib::setMutableRecDefinitions(true);
+    CHECK(rec(id, body2) == r);  // overwrite allowed in legacy mode
+    {
+        Tree v = nullptr, b = nullptr;
+        CHECK(isRec(r, v, b) && b == body2);  // the new body took
+    }
+    rec(id, body);  // restore the original definition (also an overwrite)
+    tlib::setMutableRecDefinitions(false);
+    caught = false;
+    try {
+        rec(id, body2);
+    } catch (std::runtime_error&) {
+        caught = true;
+    }
+    CHECK(caught);  // immutable again
+
     // alphaEquiv : the direct pair-memoized alpha-equivalence
     {
         Tree ia = tree(unique("AEA")), ib = tree(unique("AEB")), ic = tree(unique("AEC"));
