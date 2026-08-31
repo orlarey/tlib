@@ -954,6 +954,564 @@ inline schedule<N> csschedule(const digraph<N>& G, unsigned int R, unsigned int 
 }
 
 /**
+ * @brief CSSCHEDULE v2 -- compositional scheduler of the spec in
+ * faust-migration/CSSCHEDULE.md. Dominator-tree blocks, K-wide frontiers
+ * of open traces, cycle-wide DP combination under (R,U), ASAP closure as
+ * the only R certificate.
+ *
+ * Diversity (spec par.6 and par.9), third cut: the prefix-grid DP keeps
+ * a PARETO BEAM of up to K (cycles, peak) entries per state -- the
+ * spec's "K best paths", subsuming the two cost orders of the second
+ * cut in a single run -- the plain concatenation joins as a structural
+ * alternative, and every dominator node folds its children in two
+ * orders (operand-first, then largest-frontier-first) when they differ.
+ * Frontiers keep the K best distinct traces. Still deviating from the
+ * full spec: no interface-signature diversity;
+ * the R filter inside folds is a PRUNE (open inputs are not placed yet,
+ * mid-fold peaks under-estimate) and CloseReplay alone certifies
+ * peak <= R. A pair over the cell budget degrades to concatenation.
+ */
+// work accounting of one csschedule2 run : how many trace pairs were
+// combined, how many degraded to concatenation (budget or pair cap), and
+// how many grid cells were actually charged against the budget
+struct cs2stats {
+    long pairs    = 0;
+    long degraded = 0;
+    long cells    = 0;
+};
+
+template <typename N>
+inline schedule<N> csschedule2(const digraph<N>& G, unsigned int R, unsigned int U,
+                               unsigned int K = 4, bool* feasibleOut = nullptr,
+                               long cellBudget = 8000000, cs2stats* statsOut = nullptr,
+                               bool bfSpine = false)
+{
+    // The SPINE is the base topological order everything inherits from :
+    // fold orders derive from it, the identity seed IS it, and above all
+    // budget-degraded pairs concatenate segments shaped like it. df spine
+    // (default) leans deep and local ; bf spine leans wide and parallel --
+    // the DP refines either under (R,U) where the budget allows.
+    const schedule<N>     topo  = bfSpine ? bfschedule(G) : dfschedule(G);
+    const std::vector<N>& order = topo.elements();  // operands first
+    const int             V     = int(order.size());
+    digraph<N>            Rg    = reverse(G);
+
+    std::map<N, int> pos;
+    for (int i = 0; i < V; i++) {
+        pos[order[i]] = i;
+    }
+    std::vector<std::vector<int>> ops(V), cons(V);
+    std::vector<int>              usage(V, 0);
+    for (int i = 0; i < V; i++) {
+        for (const auto& d : G.destinations(order[i])) {
+            ops[i].push_back(pos[d.first]);
+        }
+        for (const auto& c : Rg.destinations(order[i])) {
+            cons[i].push_back(pos[c.first]);
+        }
+        usage[i] = int(cons[i].size());
+    }
+
+    // ---- immediate dominators (same construction as csschedule)
+    std::vector<int> idom(V + 1, -1);
+    idom[V] = V;
+    auto intersect = [&](int a, int b) {
+        while (a != b) {
+            while (a < b) {
+                a = idom[a];
+            }
+            while (b < a) {
+                b = idom[b];
+            }
+        }
+        return a;
+    };
+    for (int i = V - 1; i >= 0; i--) {
+        int nid = -1;
+        if (cons[i].empty()) {
+            nid = V;
+        } else {
+            for (int c : cons[i]) {
+                if (idom[c] != -1) {
+                    nid = (nid == -1) ? c : intersect(nid, c);
+                }
+            }
+            if (nid == -1) {
+                nid = V;
+            }
+        }
+        idom[i] = nid;
+    }
+    std::vector<std::vector<int>> children(V + 1);
+    for (int i = 0; i < V; i++) {
+        children[idom[i]].push_back(i);  // operand-first order
+    }
+
+    using Trace = std::vector<int>;
+    struct Cand {
+        Trace trace;
+        int   cyc = 0, peak = 0;
+    };
+
+    // provisional (open) score of a trace: ASAP under U on its internal
+    // deps, liveness with global usage counts (open inputs ignored)
+    auto scoreTrace = [&](Cand& c) {
+        std::vector<int>  cy(V, -1), consumed(V, 0);
+        std::vector<char> inT(V, 0);
+        for (int o : c.trace) {
+            inT[o] = 1;
+        }
+        int cur = 0, slots = 0, live = 0, mx = 0;
+        for (int o : c.trace) {
+            int lo = 0;
+            for (int d : ops[o]) {
+                if (inT[d]) {
+                    if (cy[d] < 0) {  // in-trace dep not yet emitted:
+                        c.cyc  = 1 << 27;  // topology violated, bury it
+                        c.peak = 1 << 27;
+                        return;
+                    }
+                    lo = std::max(lo, cy[d] + 1);
+                }
+            }
+            if (lo > cur) {
+                cur   = lo;
+                slots = 0;
+            } else if (slots == int(U)) {
+                cur++;
+                slots = 0;
+            }
+            cy[o] = cur;
+            slots++;
+            if (usage[o] > 0) {
+                live++;
+            }
+            for (int d : ops[o]) {
+                if (inT[d] && ++consumed[d] == usage[d] && usage[d] > 0) {
+                    live--;
+                }
+            }
+            mx = std::max(mx, live);
+        }
+        c.cyc  = c.trace.empty() ? 0 : cur + 1;
+        c.peak = mx;
+    };
+
+    const long PAIRCAP    = 4000000;   // per-pair memory guard
+    long       cellsLeft  = cellBudget;  // global work budget (spec par.11)
+    cs2stats   stats;                    // work accounting for this run
+
+    // ---- the cycle-wide DP on the prefix grid, with a PARETO BEAM of up
+    // to K (cycles, peak) entries per state -- the spec's "K best paths"
+    // (par.6). All insertions into a state happen before it is processed
+    // (transitions strictly increase (i,j)), so each beam is finalized
+    // exactly once and entry indices stay stable for the backtracks.
+    auto dpBeam = [&](const Trace& A, const Trace& B, bool filterR,
+                      std::vector<Cand>& outv) -> bool {
+        const int        m = int(A.size()), n = int(B.size());
+        std::vector<int> inA(V, -1), inB(V, -1);
+        for (int i = 0; i < m; i++) {
+            inA[A[i]] = i;
+        }
+        for (int j = 0; j < n; j++) {
+            inB[B[j]] = j;
+        }
+        auto placed = [&](int d, int i, int j) {
+            if (inA[d] >= 0) {
+                return inA[d] < i;
+            }
+            if (inB[d] >= 0) {
+                return inB[d] < j;
+            }
+            return true;  // open input: owned above, no obligation here
+        };
+        auto deathsAt = [&](int o, int i, int j) {
+            int dth = 0;
+            for (int d : ops[o]) {
+                int consumedNow = 0;
+                for (int c : cons[d]) {
+                    if ((inA[c] >= 0 && inA[c] < i) || (inB[c] >= 0 && inB[c] < j) ||
+                        c == o) {
+                        consumedNow++;
+                    }
+                }
+                if (consumedNow == usage[d]) {
+                    dth++;
+                }
+            }
+            return dth;
+        };
+        auto orderBatch = [&](std::vector<int>& batch, int i, int j) {
+            std::sort(batch.begin(), batch.end(), [&](int a, int b) {
+                int da = (usage[a] ? 1 : 0) - deathsAt(a, i, j);
+                int db = (usage[b] ? 1 : 0) - deathsAt(b, i, j);
+                return da != db ? da < db : a < b;
+            });
+        };
+        auto evalBatch = [&](int i, int j, int x, int y, int liveIn, int& net) {
+            std::vector<int> batch;
+            for (int k = 0; k < x; k++) {
+                batch.push_back(A[i + k]);
+            }
+            for (int k = 0; k < y; k++) {
+                batch.push_back(B[j + k]);
+            }
+            for (int o : batch) {
+                for (int d : ops[o]) {
+                    if ((inA[d] >= 0 || inB[d] >= 0) && !placed(d, i, j)) {
+                        return -1;
+                    }
+                }
+            }
+            orderBatch(batch, i, j);
+            int              live = liveIn, mx = liveIn;
+            std::vector<int> placedBatch;
+            for (int o : batch) {
+                if (usage[o] > 0) {
+                    live++;
+                }
+                for (int d : ops[o]) {
+                    int consumed = 0;
+                    for (int c : cons[d]) {
+                        bool inPref =
+                            (inA[c] >= 0 && inA[c] < i) || (inB[c] >= 0 && inB[c] < j);
+                        bool inBat = false;
+                        for (int pb : placedBatch) {
+                            if (pb == c) {
+                                inBat = true;
+                            }
+                        }
+                        if (inPref || inBat || c == o) {
+                            consumed++;
+                        }
+                    }
+                    if (usage[d] > 0 && consumed == usage[d]) {
+                        live--;
+                    }
+                }
+                placedBatch.push_back(o);
+                mx = std::max(mx, live);
+            }
+            net = live - liveIn;
+            return mx;
+        };
+        struct Ent {
+            int   cyc, pk, par, pei;
+            short act;
+        };
+        const int      W  = n + 1;
+        const int      NS = (m + 1) * W;
+        const unsigned BW = std::max(1u, K);  // beam width
+        std::vector<std::vector<Ent>> beam(NS), pend(NS);
+        std::vector<int>              lv(NS, -1);
+        pend[0].push_back({0, 0, -1, -1, short(-1)});
+        lv[0] = 0;
+        for (int i = 0; i <= m; i++) {
+            for (int j = 0; j <= n; j++) {
+                int s = i * W + j;
+                if (!pend[s].empty()) {
+                    std::sort(pend[s].begin(), pend[s].end(), [](const Ent& a, const Ent& b) {
+                        return a.cyc != b.cyc ? a.cyc < b.cyc : a.pk < b.pk;
+                    });
+                    int minPk = 1 << 30;
+                    for (Ent& e : pend[s]) {
+                        if (e.pk < minPk && beam[s].size() < BW) {
+                            beam[s].push_back(e);  // Pareto front, capped
+                            minPk = e.pk;
+                        }
+                    }
+                    pend[s].clear();
+                    pend[s].shrink_to_fit();
+                }
+                if (beam[s].empty()) {
+                    continue;
+                }
+                for (int x = 0; x <= std::min<int>(U, m - i); x++) {
+                    for (int y = (x == 0) ? 1 : 0; x + y <= int(U) && y <= n - j; y++) {
+                        int net = 0;
+                        int mx  = evalBatch(i, j, x, y, lv[s], net);
+                        if (mx < 0) {
+                            break;  // batch prefix not ready: larger y neither
+                        }
+                        if (filterR && mx > int(R)) {
+                            continue;
+                        }
+                        int t = (i + x) * W + (j + y);
+                        if (lv[t] < 0) {
+                            lv[t] = lv[s] + net;  // set-determined
+                        }
+                        for (size_t ei = 0; ei < beam[s].size(); ei++) {
+                            const Ent& e = beam[s][ei];
+                            pend[t].push_back({e.cyc + 1, std::max(e.pk, mx), s, int(ei),
+                                               short(x * (U + 1) + y)});
+                        }
+                    }
+                }
+            }
+        }
+        int fs = m * W + n;
+        if (beam[fs].empty()) {
+            return false;
+        }
+        for (const Ent& fe : beam[fs]) {
+            std::vector<std::pair<int, int>> steps;
+            const Ent*                       e = &fe;
+            while (e->par >= 0) {
+                steps.push_back({e->act / (U + 1), e->act % (U + 1)});
+                e = &beam[e->par][e->pei];
+            }
+            std::reverse(steps.begin(), steps.end());
+            Cand c;
+            int  i = 0, j = 0;
+            for (auto& st : steps) {
+                std::vector<int> batch;
+                for (int k = 0; k < st.first; k++) {
+                    batch.push_back(A[i + k]);
+                }
+                for (int k = 0; k < st.second; k++) {
+                    batch.push_back(B[j + k]);
+                }
+                orderBatch(batch, i, j);
+                for (int o : batch) {
+                    c.trace.push_back(o);
+                }
+                i += st.first;
+                j += st.second;
+            }
+            c.cyc  = fe.cyc;
+            c.peak = fe.pk;
+            outv.push_back(std::move(c));
+        }
+        return true;
+    };
+
+    // concatenation A-then-B is a candidate only when valid : no op of A
+    // may depend on an op of B (possible under the alternate fold order,
+    // where a block precedes a shared value it reads)
+    auto concatCand = [&](const Trace& A, const Trace& B, std::vector<Cand>& out) {
+        std::vector<char> inB(V, 0);
+        for (int o : B) {
+            inB[o] = 1;
+        }
+        for (int o : A) {
+            for (int d : ops[o]) {
+                if (inB[d]) {
+                    return;  // invalid concatenation, skip
+                }
+            }
+        }
+        Cand c;
+        c.trace = A;
+        c.trace.insert(c.trace.end(), B.begin(), B.end());
+        scoreTrace(c);
+        out.push_back(std::move(c));
+    };
+
+    // ---- combine two disjoint traces: up to three diverse candidates
+    auto combine = [&](const Trace& A, const Trace& B) -> std::vector<Cand> {
+        if (A.empty() || B.empty()) {
+            Cand c;
+            c.trace = A.empty() ? B : A;
+            scoreTrace(c);
+            return {c};
+        }
+        const long cost = long(A.size() + 1) * long(B.size() + 1);
+        stats.pairs++;
+        if (cost > PAIRCAP || cost > cellsLeft) {
+            stats.degraded++;
+            std::vector<Cand> deg;  // budget exhausted: degrade to concat
+            concatCand(A, B, deg);
+            if (deg.empty()) {
+                concatCand(B, A, deg);  // acyclicity: one direction is valid
+            }
+            return deg;
+        }
+        cellsLeft -= cost;
+        stats.cells += cost;
+        std::vector<Cand> out;
+        if (!dpBeam(A, B, true, out)) {
+            if (cost <= cellsLeft) {
+                cellsLeft -= cost;
+                stats.cells += cost;
+                dpBeam(A, B, false, out);  // no R-feasible path: unfiltered
+            }
+        }
+        concatCand(A, B, out);
+        return out;
+    };
+
+    // rank by (cycles, peak), drop duplicate traces, keep K
+    auto dedupTrim = [&](std::vector<Cand>& v) {
+        std::sort(v.begin(), v.end(), [](const Cand& a, const Cand& b) {
+            return a.cyc != b.cyc ? a.cyc < b.cyc : a.peak < b.peak;
+        });
+        std::set<size_t>  seen;
+        std::vector<Cand> out;
+        for (auto& c : v) {
+            size_t h = 1469598103934665603ull;
+            for (int o : c.trace) {
+                h = (h ^ size_t(o)) * 1099511628211ull;
+            }
+            if (seen.insert(h).second) {
+                out.push_back(std::move(c));
+            }
+            if (out.size() >= K) {
+                break;
+            }
+        }
+        v = std::move(out);
+    };
+
+    // ---- frontier fold (spec par.7), two child orders when they differ
+    std::vector<std::vector<Cand>> frontier(V + 1);
+    auto foldOrder = [&](const std::vector<int>& kids) {
+        std::vector<Cand> F{Cand{}};
+        for (int ch : kids) {
+            std::vector<Cand> nf;
+            for (const Cand& f : F) {
+                for (const Cand& t : frontier[ch]) {
+                    for (Cand& c : combine(f.trace, t.trace)) {
+                        nf.push_back(std::move(c));
+                    }
+                }
+            }
+            dedupTrim(nf);
+            F = std::move(nf);
+        }
+        return F;
+    };
+    auto foldNode = [&](int d) {
+        const std::vector<int>& kids = children[d];
+        std::vector<Cand>       F    = foldOrder(kids);
+        auto                    childSize = [&](int a) {
+            return frontier[a].empty() ? size_t(0) : frontier[a][0].trace.size();
+        };
+        size_t total = 0;
+        for (int ch : kids) {
+            total += childSize(ch);
+        }
+        // alternate fold orders only while the fold stays affordable :
+        // beyond the threshold the primary order alone is explored
+        if (kids.size() > 2 && total <= 1200 && cellsLeft > 0) {
+            std::vector<std::vector<int>> alts;
+            {
+                std::vector<int> byBig = kids;  // largest child frontier first
+                std::stable_sort(byBig.begin(), byBig.end(),
+                                 [&](int a, int b) { return childSize(a) > childSize(b); });
+                alts.push_back(std::move(byBig));
+                std::vector<int> bySmall = kids;  // smallest first
+                std::stable_sort(bySmall.begin(), bySmall.end(),
+                                 [&](int a, int b) { return childSize(a) < childSize(b); });
+                alts.push_back(std::move(bySmall));
+                std::vector<int> rev = kids;  // reversed operand order
+                std::reverse(rev.begin(), rev.end());
+                alts.push_back(std::move(rev));
+            }
+            for (auto& alt : alts) {
+                if (alt != kids) {
+                    std::vector<Cand> F2 = foldOrder(alt);
+                    for (Cand& c : F2) {
+                        F.push_back(std::move(c));
+                    }
+                }
+            }
+            dedupTrim(F);
+        }
+        return F;
+    };
+    for (int i = 0; i < V; i++) {  // operand-first: children before idom
+        std::vector<Cand> F = foldNode(i);
+        for (Cand& f : F) {
+            f.trace.push_back(i);  // "f suivie de d"
+            scoreTrace(f);
+        }
+        dedupTrim(F);
+        frontier[i] = std::move(F);
+    }
+    std::vector<Cand> C = foldNode(V);
+
+    // ---- ensemble seeding: the existing family's traces join the
+    // candidates before closure, so csschedule2 never returns worse than
+    // the best of the portfolio on any instance
+    {
+        Cand cdf;  // the spine = the identity over `order`
+        for (int i = 0; i < V; i++) {
+            cdf.trace.push_back(i);
+        }
+        scoreTrace(cdf);
+        C.push_back(std::move(cdf));
+        const schedule<N> lab = csschedule(G, R, U);
+        Cand              clab;
+        for (const N& n2 : lab.elements()) {
+            clab.trace.push_back(pos[n2]);
+        }
+        scoreTrace(clab);
+        C.push_back(std::move(clab));
+    }
+
+    // ---- closure: ASAP cycles under U, global liveness, hard R (par.6-7)
+    auto closeReplay = [&](const Trace& T, int& cycOut, int& pkOut) {
+        std::vector<int> cy(V, -1), consumed(V, 0);
+        int              cur = 0, slots = 0, live = 0, mx = 0;
+        for (int o : T) {
+            int lo = 0;
+            for (int d : ops[o]) {
+                lo = std::max(lo, cy[d] + 1);
+            }
+            if (lo > cur) {
+                cur   = lo;
+                slots = 0;
+            } else if (slots == int(U)) {
+                cur++;
+                slots = 0;
+            }
+            cy[o] = cur;
+            slots++;
+            if (usage[o] > 0) {
+                live++;
+            }
+            for (int d : ops[o]) {
+                if (++consumed[d] == usage[d] && usage[d] > 0) {
+                    live--;
+                }
+            }
+            mx = std::max(mx, live);
+        }
+        cycOut = cur + 1;
+        pkOut  = mx;
+        return mx <= int(R);
+    };
+    int  bestIdx = -1, bestCyc = 1 << 28, bestPk = 1 << 28;
+    bool feasible = false;
+    for (size_t k = 0; k < C.size(); k++) {
+        int  cy2 = 0, pk2 = 0;
+        bool ok = closeReplay(C[k].trace, cy2, pk2);
+        if (ok && (!feasible || cy2 < bestCyc || (cy2 == bestCyc && pk2 < bestPk))) {
+            feasible = true;
+            bestIdx  = int(k);
+            bestCyc  = cy2;
+            bestPk   = pk2;
+        }
+        if (!feasible && bestIdx == -1) {
+            bestIdx = int(k);  // provisional: best-ranked even if over R
+        }
+    }
+    if (feasibleOut) {
+        *feasibleOut = feasible;
+    }
+    if (statsOut) {
+        *statsOut = stats;
+    }
+    schedule<N> S;
+    if (bestIdx >= 0) {
+        for (int o : C[bestIdx].trace) {
+            S.append(order[o]);
+        }
+    }
+    return S;
+}
+
+/**
  * @brief Shape-ALIGNED scheduling of a DAG G -- Yann's alignment step.
  *
  * View the shapes as colors : a schedule is well aligned when equal colors
