@@ -77,3 +77,4 @@ test*.txt
 # Coordination channel between working instances : live scratch, not a project
 # artifact. Statuses go stale within minutes and it would churn every session.
 DIALOG.md
+DIALOG-JFLA.md

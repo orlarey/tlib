@@ -396,6 +396,15 @@ because nothing else distinguishes "verified" from "recomputed". A one-line
 script that prints every reference next to the source line it lands on turns a
 tedious act of faith into ten seconds of reading.
 
+And the trace is not a formality, because the *repair* has its own failure mode.
+Applying a hundred corrections as a batch of textual substitutions looks like
+re-derivation and is not: a rule rewriting `286` to `287` leaves a `287` that
+the next rule, `287` to `290`, immediately consumes. Three anchors were
+silently merged onto their neighbours that way, and only the line-by-line trace
+caught them before the stamp was moved. Batch substitution is arithmetic
+wearing a costume. **What is verified is what the trace shows each reference
+landing on** — not the map you applied to get there.
+
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
 vendored copy of it. Decide, before the first finding, where findings
@@ -470,6 +479,7 @@ produced them.
 - [ ] Concept stamped with the commit its code references were verified against
 - [ ] Every anchor re-derived by searching its text, never by shifting a number
 - [ ] The re-verification printed a trace: file, line, and the line's content
+- [ ] The trace was read AFTER the repairs, not before — batch edits collide
 - [ ] Findings routed to their owner, and closed only once every copy is fixed and tested
 - [ ] Comments near recently changed code re-read, not just the changed lines
 - [ ] Each finding taken as far up as it goes: documented, checked, or made unconstructible

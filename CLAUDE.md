@@ -1,40 +1,58 @@
 # Working in tlib
 
-## Read the coordination channel first
+## Read the coordination channels first
 
-Two Claude sessions work on this codebase: one in the sources (`faust`,
-`signals`, `tlib/`), one on the documentation. They coordinate through two
-append-only journals, and **neither is notified of the other's writes** — a
-message once sat unread for four days because nothing prompted a read.
+Three Claude sessions work around this codebase, and **none is notified of the
+others' writes** — a message once sat unread for four days because nothing
+prompted a read.
 
-So, **at the start of any task touching tlib, and before answering "any news?":**
+| session | lives in | owns |
+| :--- | :--- | :--- |
+| sources | `faust`, `signals`, the `tlib/` sources | the code |
+| documentation (this one) | `tlib/*.md`, `tour-examples.cpp` | the guide and its method |
+| article JFLA 2027 | `FAUST-JFLA2027/` | `document.md` and its material |
+
+Each session writes its own journal per correspondent, and reads the others'.
+So, **at the start of any task touching tlib, and before answering "any
+news?":**
 
 ```
-tail -80 ~/Documents/Install/faust-migration/DIALOG.md     # what the sources side wrote
-tail -40 DIALOG.md                                          # what this side last said
+tail -80 ~/Documents/Install/faust-migration/DIALOG.md   # sources → us
+tail -60 ~/Documents/Install/FAUST-JFLA2027/DIALOG-TLIB.md  # article → us
+tail -40 DIALOG.md                                       # what we last told sources
+tail -40 DIALOG-JFLA.md                                  # what we last told the article
 ```
 
-Write replies at the **end** of `tlib/DIALOG.md`, under a dated header
+We write replies at the **end** of `tlib/DIALOG.md` (to the sources session) or
+`tlib/DIALOG-JFLA.md` (to the article session), under a dated header
 `## AAAA-MM-JJ — tlib`, never inside an older entry. Each item carries a status:
 **INFO** (nothing expected), **ACTION** (something is expected of the other
 side), **OPEN** (finding not yet closed), **CLOSED** (with what closed it). A
 finding is closed when *every copy is fixed, built and tested* — not when it has
-been reported. `DIALOG.md` is gitignored: it is live scratch, not a project
-artifact.
+been reported. Both journals are gitignored: live scratch, not project
+artifacts.
 
 ## Territory
 
-Sources are the other session's, documentation is this one's.
+Sources are the sources session's, `FAUST-JFLA2027/` is the article session's,
+documentation is this one's.
 
 | | |
 | :--- | :--- |
-| theirs | `tlib/*.hh`, `tlib/*.cpp` |
-| ours | `*.md`, `tour-examples.cpp`, and its `CMakeLists.txt` target |
+| theirs (sources) | `tlib/*.hh`, `tlib/*.cpp`, and everything under `faust/`, `signals/`, `faust-migration/` |
+| theirs (article) | everything under `FAUST-JFLA2027/` |
+| ours | `tlib/*.md`, `tour-examples.cpp`, and its `CMakeLists.txt` target |
 
 Need a source change? Write it in `DIALOG.md` as an **ACTION**; they apply it.
-The one exception, agreed by both sides: a **literal port** of a fix they have
-already validated and asked to be carried over — copy it without rewriting, and
-report any line where you diverge.
+A sentence of the article that looks wrong? `DIALOG-JFLA.md`, **ACTION**; they
+decide. The one exception, agreed with the sources side: a **literal port** of a
+fix they have already validated and asked to be carried over — copy it without
+rewriting, and report any line where you diverge.
+
+**The article quotes the guide.** When it does, it quotes a sha: an excerpt is
+only as true as the stamp of the chapter it came from. Before answering any
+question from the article session about a code excerpt, re-derive the anchors
+against the current HEAD rather than trusting the stamp.
 
 ## Three vendored copies
 
