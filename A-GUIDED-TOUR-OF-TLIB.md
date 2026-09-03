@@ -618,6 +618,31 @@ program fed the same input reproduces the same serials. The order is history-
 dependent by nature: build the same trees in a different order and every serial
 changes.
 
+The rule has a converse, and one case from the compiler states it better than
+the rule does. Faust's scheduler groups the nodes of a graph by **shape**: for
+each node it builds a *shape tree* — the computation with its data forgotten,
+operands replaced by holes, the operator kept literal so that a multiplication
+and an addition do not share a shape — and that tree, being built through
+`tree(node, br)`, is hash-consed. Two nodes of one shape are therefore one
+pointer, and that shape tree is the node's **colour** — the scheduler groups
+instances of one colour onto common ranks, the banks a vectoriser can pack.
+The pointer *is* the colour's identity, so using it as an identity was right.
+Using it as a **key** was not: the colour was handed over as its pointer cast to
+an integer, the schedulers filed the colours in a `std::map` under that key,
+then sorted the classes by decreasing frequency with a comparator reading
+the frequency alone — so ties kept the map's order, which was address order,
+which was that run's heap. Three runs of one binary on one program produced
+three different loop bodies.
+
+Nothing there *meant* to depend on an address. The colour entered no canonical
+ordering by intention; it entered one through the container that received it,
+and a stable sort on a partial key handed the tie-break to insertion order. The
+fix is one word — the shape tree's `serial()` in place of its address (Faust
+`bd8aa6fd9`, `compiler/generator/compile_scal.cpp`) — and it buys exactly what a
+serial can buy: determinism per binary. Two binaries built by *different* C++
+compilers still construct the same trees in different orders, so their serials
+differ; that is a separate problem, and the reason `fCanonHash` exists.
+
 **`fCanonHash`** ([tree.hh:290](tlib/tree.hh#L290)) exists for the cases where
 that is not good enough. It is a structural hash synthesised at construction
 from the node's canonical hash and the children's — and the way the children
@@ -649,7 +674,12 @@ to hash. The library therefore keeps a **registry**
 ([node.hh:77-83](tlib/node.hh#L77-L83), implemented at
 [tree.cpp:112-126](tlib/tree.cpp#L112-L126)): a pointer whose *name* was
 declared at creation hashes by that name — value-derived, identical across
-builds — and only an unregistered pointer falls back to its address.
+builds — and only an unregistered pointer falls back to its address. A
+diagnostic goes with it: with `TLIB_DBJ_POINTER_CENSUS=1` set, a de Bruijn form
+about to be named from its hash is walked and every unregistered pointer payload
+reported with the head symbol of its parent
+([recursive-tree.cpp:483-507](tlib/recursive-tree.cpp#L483-L507)) — the two
+facts that identify which creator forgot to register.
 
 The registry exists because the obvious reassurance was false. The header used
 to say that such nodes never enter the canonical orderings, so their
@@ -2598,6 +2628,31 @@ The conformance test is `checkNormalizeRecGroups`
 ([tests.cpp:826](tests.cpp#L826)): a split with a dissolution, twins unified
 across two prisons, a transversal merge, and idempotence — normalising a
 normalised term returns the same pointer.
+
+That last case is load-bearing in a way one only discovers by trying to break
+it. Three things here define one another: a group's **name** is derived from
+the canonical hash of its de Bruijn form; the **member order** inside a
+component is `canonicalTreeLess`, which reads the same hashes; and the
+definitions being ordered mention their own group through projections, which
+the name identifies. The circle closes, and it settles only because the naming
+hash is the one **cached at construction** and never recomputed.
+
+Replacing it with a hash recomputed by traversal at naming time — layout-free by
+construction rather than layout-free by the registry (§2), which sounds like the
+better of the two — was tried and reverted, and the comment now records what the
+attempt broke ([recursive-tree.cpp:474-481](tlib/recursive-tree.cpp#L474-L481)):
+*the member order inside a group and the group's name must be fixed points of
+one another, and one does not change the naming hash alone.* The symptom was
+this test's idempotence failing on the transversal merge, the group's name
+oscillating between two values from one normalisation to the next — a pair of
+mutually defined quantities with one side moved, which has no fixed point to
+settle on.
+
+How it was caught is the part worth keeping. The entire Faust corpus saw
+nothing: its client normalises once and never asks whether a second pass returns
+the same pointer. The library's own test failed immediately. A corpus exercises
+what a client happens to do; a property test asserts what the library claims,
+and only the second kind can fail on a property nobody currently uses.
 
 One consequence was not designed and is the best argument for the
 transformation, because it concerns TLIB alone. `sym2deBruijn` (§8) converts a
