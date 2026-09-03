@@ -629,14 +629,20 @@ instances of one colour onto common ranks, the banks a vectoriser can pack.
 The pointer *is* the colour's identity, so using it as an identity was right.
 Using it as a **key** was not: the colour was handed over as its pointer cast to
 an integer, the schedulers filed the colours in a `std::map` under that key,
-then sorted the classes by decreasing frequency with a comparator reading
-the frequency alone — so ties kept the map's order, which was address order,
-which was that run's heap. Three runs of one binary on one program produced
-three different loop bodies.
+then enumerated that map — so the sequence handed to the sort came out in
+increasing order of the key, which was address order, which was that run's
+heap — and sorted it by decreasing frequency with a comparator reading the
+frequency alone. Three runs of one binary on one program produced three
+different loop bodies.
 
 Nothing there *meant* to depend on an address. The colour entered no canonical
 ordering by intention; it entered one through the container that received it,
-and a stable sort on a partial key handed the tie-break to insertion order. The
+and then through a comparator unable to separate two classes of equal
+frequency. That is the shape of it, and it is worth stating without any appeal
+to the sort's stability — which is not the point, and here not even available,
+`std::sort` offering none: **a comparator that does not distinguish two
+elements leaves their order to the input sequence**, so the result is a
+function of the data *and* of how the data arrived. The
 fix is one word — the shape tree's `serial()` in place of its address (Faust
 `bd8aa6fd9`, `compiler/generator/compile_scal.cpp`) — and it buys exactly what a
 serial can buy: determinism per binary. Two binaries built by *different* C++
