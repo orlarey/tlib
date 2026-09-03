@@ -405,6 +405,24 @@ caught them before the stamp was moved. Batch substitution is arithmetic
 wearing a costume. **What is verified is what the trace shows each reference
 landing on** — not the map you applied to get there.
 
+**And do not count a proxy for the claim.** The third variant of the same
+mistake, and the hardest to see, because its output looks exactly like a
+measurement. Asked whether four messages carried a request, I grepped for a
+named recipient in the body and published a four-row table: four out of four.
+The criterion was not "names someone", it was "expects an answer", and one of
+the four named a colleague only to report to them. A second proxy, counting
+question marks, gave one out of four — requests get written as imperatives.
+Two cheap predicates, two wrong counts; only reading the four bodies gave the
+right one.
+
+The three share a shape: something adjacent and cheap is substituted for the
+thing claimed, and **the substitution leaves no trace in the output**. A shifted
+line number looks like a checked one, a paraphrase looks like a reading, a
+proxy count looks like a count. So the question to ask of your own verification
+is not "did I check?" but *"is what I measured the thing I am asserting?"* —
+and when the two differ by a step of reasoning, however short, the step is
+where the error will be.
+
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
 vendored copy of it. Decide, before the first finding, where findings
@@ -480,6 +498,7 @@ produced them.
 - [ ] Every anchor re-derived by searching its text, never by shifting a number
 - [ ] The re-verification printed a trace: file, line, and the line's content
 - [ ] The trace was read AFTER the repairs, not before — batch edits collide
+- [ ] What was measured is the claim itself, not a cheaper predicate near it
 - [ ] Findings routed to their owner, and closed only once every copy is fixed and tested
 - [ ] Comments near recently changed code re-read, not just the changed lines
 - [ ] Each finding taken as far up as it goes: documented, checked, or made unconstructible
