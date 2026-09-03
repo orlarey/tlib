@@ -50,12 +50,20 @@ against the current HEAD rather than trusting the stamp.
 ## Three vendored copies
 
 `tlib/` is duplicated into `faust/compiler/tlib/` and `signals/tlib/`. They must
-stay byte-identical:
+stay byte-identical — **and so must the vendored `DirectedGraph/`**, which this
+repository builds against (`CMakeLists.txt:40`) and which has a fourth copy in
+its own reference repository:
 
 ```
-diff -rq tlib ~/Documents/Install/faust/compiler/tlib
-diff -rq tlib ~/Documents/Install/signals/tlib
+for d in ~/Documents/Install/faust/compiler ~/Documents/Install/signals; do
+    diff -rq tlib "$d/tlib" ; diff -rq DirectedGraph "$d/DirectedGraph"
+done
+diff -rq DirectedGraph ~/Documents/Install/DirectedGraph/DirectedGraph
 ```
+
+Checking `tlib/` alone is how a fix once landed in three copies and not in the
+fourth: a check with a blind spot eventually lets through exactly what hides
+in it.
 
 ## Build and test
 
