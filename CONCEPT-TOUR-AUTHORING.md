@@ -415,13 +415,31 @@ question marks, gave one out of four — requests get written as imperatives.
 Two cheap predicates, two wrong counts; only reading the four bodies gave the
 right one.
 
-The three share a shape: something adjacent and cheap is substituted for the
+**And do not report the shape of your instrument as a fact about the world.**
+The fourth, and the one that catches people who have learned the other three.
+Asked which schedulers had callers, I ran two greps: the first counted
+occurrences of all fourteen names, the second printed call sites for a
+hand-written pattern that held only seven. I published the second's silence as
+an absence, with the first's non-zero counts still on the screen. The same day,
+on a different subject, a colleague reported "three untracked files" from a
+command that ended in `head -3`, and wrote the diagnosis better than I had:
+*I passed off the shape of my own pipeline as a fact about the disk.* A
+truncated listing and a narrowed pattern are the same mistake — the tool's
+limit read as the world's.
+
+The four share a shape: something adjacent and cheap is substituted for the
 thing claimed, and **the substitution leaves no trace in the output**. A shifted
 line number looks like a checked one, a paraphrase looks like a reading, a
-proxy count looks like a count. So the question to ask of your own verification
-is not "did I check?" but *"is what I measured the thing I am asserting?"* —
-and when the two differ by a step of reasoning, however short, the step is
-where the error will be.
+proxy count looks like a count, and a truncated list looks like a short one. So
+the question to ask of your own verification is not "did I check?" but *"is what
+I measured the thing I am asserting?"* — and when the two differ by a step of
+reasoning, however short, the step is where the error will be.
+
+A practical corollary, cheap enough to adopt without discipline: **when a check
+returns nothing, be suspicious of the check before you are satisfied with the
+result.** An empty answer is the one an instrument gives when it is pointed
+slightly away from the question, and it is also the one that feels like good
+news.
 
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
@@ -499,6 +517,7 @@ produced them.
 - [ ] The re-verification printed a trace: file, line, and the line's content
 - [ ] The trace was read AFTER the repairs, not before — batch edits collide
 - [ ] What was measured is the claim itself, not a cheaper predicate near it
+- [ ] An empty result was doubted as an instrument failure before being believed
 - [ ] Findings routed to their owner, and closed only once every copy is fixed and tested
 - [ ] Comments near recently changed code re-read, not just the changed lines
 - [ ] Each finding taken as far up as it goes: documented, checked, or made unconstructible
