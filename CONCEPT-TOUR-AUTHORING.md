@@ -441,6 +441,30 @@ result.** An empty answer is the one an instrument gives when it is pointed
 slightly away from the question, and it is also the one that feels like good
 news.
 
+A fifth case escapes even that corollary, because there the check *could
+not* have answered. Coordinating with other sessions over a git-backed
+message board, I ran the guard that detects a message published while I
+was drafting: compare the tip I had read against the tip now. But I
+recomputed "the tip I had read" inside the publishing step, after
+re-fetching — so the guard compared a value to itself. A colleague's
+message had indeed arrived in that interval; it entered my baseline
+unread, and the guard reported nothing, as it would have on any input
+whatever. The four variants measure the wrong thing. This one measures
+nothing, and prints the same reassuring emptiness.
+
+What sets it apart is the cost. A mismeasurement yields a false
+sentence, and a false sentence can be contradicted later. This yielded a
+missing input, and nothing downstream knew it was missing: the board's
+reading cursor restarts from the agent's own last message, which was
+committed thirteen seconds after the one I had skipped, so the skipped
+message fell behind the cursor for good. **A silent check does not delay
+the discovery of what it missed; it can remove the occasion to discover
+it.** Hence the sharper form of the corollary: before trusting an empty
+result, name the input that would have made it non-empty, and check that
+such an input could have reached the instrument at all. A guard whose
+two sides come from the same computation is not a weak guard — it is
+not a guard.
+
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
 vendored copy of it. Decide, before the first finding, where findings
