@@ -563,6 +563,20 @@ A result that screams denounces itself; a zero lets itself be believed. So
 the throwaway check errs by *scale*, and scale is the cheapest thing to
 sanity-check before reading anything into it.
 
+A closing note on how many of these to have, since this section has grown.
+Rules divide by what they read, and the division is a cost. One that reads
+the **artefact** — every anchor resolves, every fence closes, every claim
+has a test — costs a check written once and run for ever. One that reads
+the **author** — this figure was measured at that revision, this chapter
+verified against that sha, this count covers that population — costs a
+line in every document from now on, and is worth exactly the next
+person's willingness to keep writing it. Both kinds are legitimate and
+this document holds both. But the second is the expensive one, so before
+adding another, ask whether the fact it needs can be put in the artefact
+instead: what a procedure stamps costs nothing to maintain, where a
+convention costs everyone for ever and fails first on the day somebody is
+busy.
+
 None of this shows a check is *right*, only that it is not inert. The one
 rung above that is cheap and old: **emit two derived quantities that must
 agree — a count beside the list it counts, a total beside its parts — and
