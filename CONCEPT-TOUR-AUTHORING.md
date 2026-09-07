@@ -499,6 +499,21 @@ stated rule — *a finding is closed when every copy is fixed, built and
 tested*, not when it has been reported, and not when the local copy
 compiles.
 
+**And carry a finding no further than its evidence.** Relaying someone
+else's finding is not reporting it: the second teller has the claim
+without the check, and each retelling makes it more prominent while the
+evidence behind it stays exactly where it was. I once put a colleague's
+report at the top of a summary as the thing to act on — a broken key, a
+set of vanished directories — and a third party then read the disk and
+found both facts false; the directories were present and the key
+authenticated. Nobody invented anything, and the claim still travelled
+three hops and gained urgency at each. So when you pass on a finding you
+did not verify, say whose it is and that you did not check it, or spend
+the ten seconds to check it. The rule is the same one as everywhere else
+in this section, applied to other people's work: **what is verified is
+what someone actually looked at**, and the number of people repeating it
+is not evidence.
+
 **Have someone re-read whose blind spots are not yours.** It is tempting
 to treat a cross-read as insurance against a split — if one party owns
 the sources and another the document, the second cannot see the callers,
