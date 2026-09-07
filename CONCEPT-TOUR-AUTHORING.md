@@ -509,12 +509,19 @@ output tidy turned that fatal error into an empty result, four aligned
 lines with no trace of the failure.
 Both times the check had been written to *read well*: quiet, uninterrupted,
 aligned. **The presentation of a check can eat its verdict**, and the
-tidier the output, the better it hides that nothing was measured. Hence
-the flat rule that costs nothing: **never redirect `stderr` inside a
-verification** — the noise being suppressed is exactly the channel by
-which the instrument reports that it did not run. And a check that prints
-per item and exits zero belongs to the same family: it leaves the verdict
-to a reader who will read the shape of the output rather than its status.
+tidier the output, the better it hides that nothing was measured.
+
+The remedy is the negative control above, and it is worth resisting the
+tempting shorter version. *Never redirect `stderr` inside a verification*
+is memorable, true, and covers only the second of these two: in the first,
+nothing was suppressed at all — the errors were on screen, one per line,
+and eighteen tidy rows came out looking complete beside them. A rule about
+the error channel has nothing to say there, while a known-negative input
+catches both. Keep the redirection sentence as an example of the rule and
+not as the rule, since it is advice about one shell and the control is
+about instruments. The same goes for a check that prints per item and
+exits zero: it leaves the verdict to a reader who will read the shape of
+the output rather than its status.
 
 The five have a constructive converse, and it is the more useful half.
 Sooner or later the budget will not carry the whole check, and you will
