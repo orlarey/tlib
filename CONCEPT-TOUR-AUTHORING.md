@@ -462,6 +462,14 @@ are where this matters, because a tool's check has run a thousand times
 and its silence has a track record, while a check written once, read once
 by eye and discarded has never been seen failing at all.
 
+And notice where the control is most needed. A check run over material
+that happens to contain faults is witnessed for free — it prints its
+failures while working, and so demonstrates it can say no at no cost to
+you. A check run over clean material is not witnessed at all: same code,
+same care, no evidence, because the corpus supplied none. So the
+unwitnessed check is systematically the one whose result is good news,
+and good news is what one is least inclined to re-examine.
+
 There is a second instrument, and the two catch different things. A
 colleague re-deriving the same question by another road will not find a
 broken instrument — it finds a working instrument answering a question
@@ -574,7 +582,13 @@ territory. The reviewer's blind spots are simply different from yours.
 
 So a cross-read is not compensation for a structural limit, it **is**
 the structure: the protocol does not repair anyone's blind spots, it
-makes them overlap. Which is also the practical instruction — ask by
+makes them overlap. Which is also why a second reader cannot be replaced
+by more care: what they contribute is not a second look but a piece of
+knowledge you do not have. Two line numbers of mine were once both
+correct and contradictory; the colleague who resolved it was not more
+attentive, they simply knew the file was rewritten several times an hour,
+having watched it move under them. An oracle you can build in ten
+seconds; an ignorance different from your own you cannot obtain alone. Which is also the practical instruction — ask by
 naming what you cannot see ("check my claims about the callers", "check
 the history attributions"), not by asking for "a review", and expect the
 reviewer to be wrong sometimes too.
