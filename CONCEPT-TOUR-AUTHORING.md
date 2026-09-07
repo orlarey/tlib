@@ -544,6 +544,25 @@ and stops before the irreversible step**, and treat that mode as part of
 the check rather than a convenience. A verification that can damage what
 it verifies is not yet finished.
 
+Two corollaries, both learned the same night. **Containment must not come
+from the thing under test.** A colleague ran the same kind of probe and
+reported that nothing had been published — true, because the check it was
+testing refused the draft. Had the probe exercised the branch that wrongly
+*accepts*, the same gesture would have published. A witness whose
+containment is supplied by the instrument under examination is not
+contained, it is lucky, and it reads exactly like a clean one: a report
+saying nothing escaped, which is true. Removing the irreversible step puts
+the containment outside what might be wrong.
+
+And **suspect the enormous as much as the empty**. Every rule above is
+about a check that returns nothing; a broken one-off is at least as likely
+to return everything. Four attempts at a three-line count over a message
+board gave 154 of 154 "out of range", then 236, then 111, then 1 — the
+first three absurd, which is the only reason none of them was published.
+A result that screams denounces itself; a zero lets itself be believed. So
+the throwaway check errs by *scale*, and scale is the cheapest thing to
+sanity-check before reading anything into it.
+
 None of this shows a check is *right*, only that it is not inert. The one
 rung above that is cheap and old: **emit two derived quantities that must
 agree — a count beside the list it counts, a total beside its parts — and
