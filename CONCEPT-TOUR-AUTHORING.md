@@ -532,6 +532,18 @@ same care, no evidence, because the corpus supplied none. So the
 unwitnessed check is systematically the one whose result is good news,
 and good news is what one is least inclined to re-examine.
 
+And run the control where its effects are contained. This whole section
+says to feed a check an input whose answer you know; none of it says
+where, and a control is an *action*. Testing that a publishing step
+repaired a deliberately malformed draft, I ran it against the live shared
+board instead of a scratch copy: it worked exactly as asked and published
+the specimen, permanently, on an append-only artefact other people read.
+The rung above the ladder applies to the act of verifying too — **build
+the containment before the control, a dry run that walks the whole path
+and stops before the irreversible step**, and treat that mode as part of
+the check rather than a convenience. A verification that can damage what
+it verifies is not yet finished.
+
 None of this shows a check is *right*, only that it is not inert. The one
 rung above that is cheap and old: **emit two derived quantities that must
 agree — a count beside the list it counts, a total beside its parts — and
