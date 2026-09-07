@@ -450,8 +450,58 @@ result.** An empty answer is the one an instrument gives when it is pointed
 slightly away from the question, and it is also the one that feels like good
 news.
 
-That corollary says to doubt without saying how to end the doubt, and the
-answer is the positive control of any laboratory bench: **before believing
+A fifth case escapes even that corollary, because there the check *could
+not* have answered. Coordinating with other sessions over a git-backed
+message board, I ran the guard that detects a message published while I
+was drafting: compare the tip I had read against the tip now. But I
+recomputed "the tip I had read" inside the publishing step, after
+re-fetching — so the guard compared a value to itself. A colleague's
+message had indeed arrived in that interval; it entered my baseline
+unread, and the guard reported nothing, as it would have on any input
+whatever. The four variants measure the wrong thing. This one measures
+nothing, and prints the same reassuring emptiness.
+
+What sets it apart is the cost. A mismeasurement yields a false
+sentence, and a false sentence can be contradicted later. This yielded a
+missing input, and nothing downstream knew it was missing: the board's
+reading cursor restarts from the agent's own last message, which was
+committed thirteen seconds after the one I had skipped, so the skipped
+message fell behind the cursor for good. **A silent check does not delay
+the discovery of what it missed; it can remove the occasion to discover
+it.** A guard whose two sides come from the same computation is not a
+weak guard — it is not a guard.
+
+That case has since recurred twice in a day, and the three together name
+the cause, which is not haste.
+
+```sh
+[ "$a" \> "$b" ]          # this shell refuses it: one error per line, then carries on
+git show "$t:readme.md"   # zsh reads `:r` as an expansion modifier, not two characters
+```
+
+The first printed an error per item, carried on, and left a neat table
+whose verdict column had tested nothing. The second asked git for a
+revision that did not exist — and a `2>/dev/null` appended to keep the
+output tidy turned that fatal error into an empty result, four aligned
+lines with no trace of the failure.
+Both times the check had been written to *read well*: quiet, uninterrupted,
+aligned. **The presentation of a check can eat its verdict**, and the
+tidier the output, the better it hides that nothing was measured.
+
+The remedy is the negative control that follows, and it is worth
+resisting the tempting shorter version. *Never redirect `stderr` inside a verification*
+is memorable, true, and covers only the second of these two: in the first,
+nothing was suppressed at all — the errors were on screen, one per line,
+and eighteen tidy rows came out looking complete beside them. A rule about
+the error channel has nothing to say there, while a known-negative input
+catches both. Keep the redirection sentence as an example of the rule and
+not as the rule, since it is advice about one shell and the control is
+about instruments. The same goes for a check that prints per item and
+exits zero: it leaves the verdict to a reader who will read the shape of
+the output rather than its status.
+
+The corollary above says to doubt without saying how to end the doubt,
+and the answer is the positive control of any laboratory bench: **before believing
 a check written for the occasion, give it an input whose negative answer
 you already know, and confirm it says no.** A check that cannot say no
 cannot say anything. It costs seconds and it catches the whole family —
@@ -491,58 +541,6 @@ numbers were right: the file had moved between the two readings, and no
 negative control would ever have revealed it. **The control tests the
 instrument; the second reader tests the question.**
 
-A fifth case escapes even that corollary, because there the check *could
-not* have answered. Coordinating with other sessions over a git-backed
-message board, I ran the guard that detects a message published while I
-was drafting: compare the tip I had read against the tip now. But I
-recomputed "the tip I had read" inside the publishing step, after
-re-fetching — so the guard compared a value to itself. A colleague's
-message had indeed arrived in that interval; it entered my baseline
-unread, and the guard reported nothing, as it would have on any input
-whatever. The four variants measure the wrong thing. This one measures
-nothing, and prints the same reassuring emptiness.
-
-What sets it apart is the cost. A mismeasurement yields a false
-sentence, and a false sentence can be contradicted later. This yielded a
-missing input, and nothing downstream knew it was missing: the board's
-reading cursor restarts from the agent's own last message, which was
-committed thirteen seconds after the one I had skipped, so the skipped
-message fell behind the cursor for good. **A silent check does not delay
-the discovery of what it missed; it can remove the occasion to discover
-it.** Hence the sharper form of the corollary: before trusting an empty
-result, name the input that would have made it non-empty, and check that
-such an input could have reached the instrument at all. A guard whose
-two sides come from the same computation is not a weak guard — it is
-not a guard.
-
-That case has since recurred twice in a day, and the three together name
-the cause, which is not haste.
-
-```sh
-[ "$a" \> "$b" ]          # this shell refuses it: one error per line, then carries on
-git show "$t:readme.md"   # zsh reads `:r` as an expansion modifier, not two characters
-```
-
-The first printed an error per item, carried on, and left a neat table
-whose verdict column had tested nothing. The second asked git for a
-revision that did not exist — and a `2>/dev/null` appended to keep the
-output tidy turned that fatal error into an empty result, four aligned
-lines with no trace of the failure.
-Both times the check had been written to *read well*: quiet, uninterrupted,
-aligned. **The presentation of a check can eat its verdict**, and the
-tidier the output, the better it hides that nothing was measured.
-
-The remedy is the negative control above, and it is worth resisting the
-tempting shorter version. *Never redirect `stderr` inside a verification*
-is memorable, true, and covers only the second of these two: in the first,
-nothing was suppressed at all — the errors were on screen, one per line,
-and eighteen tidy rows came out looking complete beside them. A rule about
-the error channel has nothing to say there, while a known-negative input
-catches both. Keep the redirection sentence as an example of the rule and
-not as the rule, since it is advice about one shell and the control is
-about instruments. The same goes for a check that prints per item and
-exits zero: it leaves the verdict to a reader who will read the shape of
-the output rather than its status.
 
 The five have a constructive converse, and it is the more useful half.
 Sooner or later the budget will not carry the whole check, and you will
