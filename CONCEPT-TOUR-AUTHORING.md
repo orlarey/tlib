@@ -474,6 +474,23 @@ such an input could have reached the instrument at all. A guard whose
 two sides come from the same computation is not a weak guard — it is
 not a guard.
 
+That case has since recurred twice in a day, and the three together name
+the cause, which is not haste. A comparison written `[ "$a" \> "$b" ]`,
+which this shell refuses, printed an error per line, carried on, and left
+a neat table whose verdict column had tested nothing. A revision written
+`"$t:readme.md"` in zsh, where `:r` is an expansion modifier rather than
+two characters, asked git for a revision that did not exist — and the
+`2>/dev/null` appended to keep the output tidy turned that fatal error
+into an empty result, four aligned lines with no trace of the failure.
+Both times the check had been written to *read well*: quiet, uninterrupted,
+aligned. **The presentation of a check can eat its verdict**, and the
+tidier the output, the better it hides that nothing was measured. Hence
+the flat rule that costs nothing: **never redirect `stderr` inside a
+verification** — the noise being suppressed is exactly the channel by
+which the instrument reports that it did not run. And a check that prints
+per item and exits zero belongs to the same family: it leaves the verdict
+to a reader who will read the shape of the output rather than its status.
+
 The five have a constructive converse, and it is the more useful half.
 Sooner or later the budget will not carry the whole check, and you will
 cut something on purpose. Two reductions are then available and they are
