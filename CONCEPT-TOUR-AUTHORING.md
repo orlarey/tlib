@@ -523,7 +523,11 @@ and good news is what one is least inclined to re-examine.
 None of this shows a check is *right*, only that it is not inert. The one
 rung above that is cheap and old: **emit two derived quantities that must
 agree — a count beside the list it counts, a total beside its parts — and
-publish them together.** A correct instrument makes them consistent; a
+publish them together.** With one condition, which is the guard's own
+condition a storey up: the two must be **derived independently**. Two
+copies of one computation always agree, and their agreement teaches
+nothing — a witness compared with itself is no more a witness than a
+guard compared with itself is a guard. A correct instrument makes them consistent; a
 wrong one now has to be wrong twice in the same direction. It is what
 catches the check that runs, discriminates, and is still wrong: a
 colleague's audit printed "31 candidates, 31 reachable" above a list of
