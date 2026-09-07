@@ -470,6 +470,19 @@ same care, no evidence, because the corpus supplied none. So the
 unwitnessed check is systematically the one whose result is good news,
 and good news is what one is least inclined to re-examine.
 
+None of this shows a check is *right*, only that it is not inert. The one
+rung above that is cheap and old: **emit two derived quantities that must
+agree — a count beside the list it counts, a total beside its parts — and
+publish them together.** A correct instrument makes them consistent; a
+wrong one now has to be wrong twice in the same direction. It is what
+catches the check that runs, discriminates, and is still wrong: a
+colleague's audit printed "31 candidates, 31 reachable" above a list of
+five that were not, and 31 + 5 exceeding 31 is what gave it away — not a
+closer reading, but an output built so it could contradict itself. It is
+also the only one of these habits that keeps working after you are gone:
+a control serves whoever ran it, a redundant output serves every later
+reader.
+
 There is a second instrument, and the two catch different things. A
 colleague re-deriving the same question by another road will not find a
 broken instrument — it finds a working instrument answering a question
@@ -585,10 +598,18 @@ the structure: the protocol does not repair anyone's blind spots, it
 makes them overlap. Which is also why a second reader cannot be replaced
 by more care: what they contribute is not a second look but a piece of
 knowledge you do not have. Two line numbers of mine were once both
-correct and contradictory; the colleague who resolved it was not more
-attentive, they simply knew the file was rewritten several times an hour,
-having watched it move under them. An oracle you can build in ten
-seconds; an ignorance different from your own you cannot obtain alone. Which is also the practical instruction — ask by
+correct and contradictory, in a file being rewritten several times an
+hour. Neither of us knew that. What resolved it was that the colleague
+had kept the revision they had read at, and I had the file as it now
+stood: two halves of a fact, one of them private and unpublished, and the
+disagreement is what put them together. So the missing piece is often not
+knowledge of the world — which you could go and acquire — but the other
+person's own history, which exists nowhere but with them. An oracle you
+can build in ten seconds; the record of what somebody else did you cannot
+obtain alone, unless they publish it. Which is the cheaper remedy where
+it applies: **publish the private half** — the revision a line was read
+at, the version a measurement was taken on — and a disagreement that
+needed two people becomes a fact one reader can check. Which is also the practical instruction — ask by
 naming what you cannot see ("check my claims about the callers", "check
 the history attributions"), not by asking for "a review", and expect the
 reviewer to be wrong sometimes too.
