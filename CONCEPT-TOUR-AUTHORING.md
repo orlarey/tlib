@@ -475,13 +475,18 @@ two sides come from the same computation is not a weak guard — it is
 not a guard.
 
 That case has since recurred twice in a day, and the three together name
-the cause, which is not haste. A comparison written `[ "$a" \> "$b" ]`,
-which this shell refuses, printed an error per line, carried on, and left
-a neat table whose verdict column had tested nothing. A revision written
-`"$t:readme.md"` in zsh, where `:r` is an expansion modifier rather than
-two characters, asked git for a revision that did not exist — and the
-`2>/dev/null` appended to keep the output tidy turned that fatal error
-into an empty result, four aligned lines with no trace of the failure.
+the cause, which is not haste.
+
+```sh
+[ "$a" \> "$b" ]          # this shell refuses it: one error per line, then carries on
+git show "$t:readme.md"   # zsh reads `:r` as an expansion modifier, not two characters
+```
+
+The first printed an error per item, carried on, and left a neat table
+whose verdict column had tested nothing. The second asked git for a
+revision that did not exist — and a `2>/dev/null` appended to keep the
+output tidy turned that fatal error into an empty result, four aligned
+lines with no trace of the failure.
 Both times the check had been written to *read well*: quiet, uninterrupted,
 aligned. **The presentation of a check can eat its verdict**, and the
 tidier the output, the better it hides that nothing was measured. Hence
