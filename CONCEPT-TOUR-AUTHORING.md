@@ -512,6 +512,18 @@ are where this matters, because a tool's check has run a thousand times
 and its silence has a track record, while a check written once, read once
 by eye and discarded has never been seen failing at all.
 
+One mechanism deserves naming, because it survives every rule above. A
+check that keys on some element of the material silently covers only the
+part that has it. A script verifying each chapter's stamp by searching for
+the stamp line reports nothing wrong about a chapter that has no stamp
+line; a script that inserts a field before an *optional* header field
+inserts nothing when that field is absent. Both construct their answer
+rather than borrowing it, so neither is the substitution warned against
+earlier, and both quietly do less than they appear to. The rule is short:
+**a check must anchor on something guaranteed to be there**, and where
+that is not available it must count what it examined and say so beside
+its verdict — thirteen chapters checked, not "no problems found".
+
 And notice where the control is most needed. A check run over material
 that happens to contain faults is witnessed for free — it prints its
 failures while working, and so demonstrates it can say no at no cost to
