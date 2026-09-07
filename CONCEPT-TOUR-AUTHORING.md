@@ -450,6 +450,26 @@ result.** An empty answer is the one an instrument gives when it is pointed
 slightly away from the question, and it is also the one that feels like good
 news.
 
+That corollary says to doubt without saying how to end the doubt, and the
+answer is the positive control of any laboratory bench: **before believing
+a check written for the occasion, give it an input whose negative answer
+you already know, and confirm it says no.** A check that cannot say no
+cannot say anything. It costs seconds and it catches the whole family —
+an order comparison fed a deliberately out-of-order pair must report it; a
+search fed a case where the target certainly exists must find it; a
+staleness guard fed a baseline two revisions old must fire. One-off checks
+are where this matters, because a tool's check has run a thousand times
+and its silence has a track record, while a check written once, read once
+by eye and discarded has never been seen failing at all.
+
+There is a second instrument, and the two catch different things. A
+colleague re-deriving the same question by another road will not find a
+broken instrument — it finds a working instrument answering a question
+badly posed. A line reference of mine was contradicted that way, and both
+numbers were right: the file had moved between the two readings, and no
+negative control would ever have revealed it. **The control tests the
+instrument; the second reader tests the question.**
+
 A fifth case escapes even that corollary, because there the check *could
 not* have answered. Coordinating with other sessions over a git-backed
 message board, I ran the guard that detects a message published while I
