@@ -648,6 +648,19 @@ checker that makes the impossible state unrepresentable. Not every
 lesson can be made mechanical. The ones that can, should — and the prose
 then points at the check instead of carrying the weight alone.
 
+**But the ladder is monotone for the artefact and not for the author.** A
+check refuses and tells you; a constraint that makes the state
+unrepresentable corrects or prevents, and says nothing. The artefact is
+better and the author learns less — and a fault the procedure has made
+impossible may still be the symptom of something the procedure does not
+cover, a habit drifting, a generator producing wrong drafts that are now
+silently repaired. So do not stop at the strong rung: **make it talk**.
+Record, in the artefact and not in a console, that it had to act — the
+field it corrected, the count it skipped, the input it rejected. A note
+printed where only its author sees it is precisely the number nobody
+publishes, and drift shows in a series, which is visible only from
+outside.
+
 The ladder is also where scaffolding ends and building begins. Some
 braces belong to the construction — a coordination journal is one, and
 is gitignored accordingly — while the checks become part of the
