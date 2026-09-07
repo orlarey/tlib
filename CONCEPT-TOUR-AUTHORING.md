@@ -465,6 +465,20 @@ such an input could have reached the instrument at all. A guard whose
 two sides come from the same computation is not a weak guard — it is
 not a guard.
 
+The five have a constructive converse, and it is the more useful half.
+Sooner or later the budget will not carry the whole check, and you will
+cut something on purpose. Two reductions are then available and they are
+not equivalent: cut the *field* — check some of the claims — or cut the
+*grid* — check all of them on a sample of the material. The first is
+invisible in the result, where an unchecked claim reads exactly like a
+checked one that held; the second is visible, and can be written in the
+document's own header. A colleague running a benchmark put it in one
+line: an absence would have read as a defeat rather than as never having
+been raced. So **when you must reduce, prefer the reduction that leaves a
+trace in the artifact**, and say in the artifact which one you took. A
+smaller verification that states its own extent is worth more than a
+larger one that silently chose what to look at.
+
 **Route the findings.** The author of a tour is often not the
 maintainer of the code, and almost never the maintainer of every
 vendored copy of it. Decide, before the first finding, where findings
