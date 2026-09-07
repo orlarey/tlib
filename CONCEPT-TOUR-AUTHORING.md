@@ -285,6 +285,15 @@ read is a diagonal resting against the posts.
 reference, at the moment of writing it. Not "the API is roughly"; open
 the file.
 
+**An artifact that cannot express an absence must be audited against the
+instrument that produced it.** A table of findings says which claims
+failed; it has no cell for a claim that was never examined, and the two
+look alike from the outside. So when a listing, a report or a results
+table is your evidence, do not read it on its own — read the selection
+rule that filled it, against the rows it produced, and ask what the rule
+could never have let in. The defect that survives every reading of the
+output is the one that is not in the output.
+
 **When a comment and the code disagree, the code wins** — and the
 comment is a finding to report, not something to quietly repeat or
 quietly ignore.
