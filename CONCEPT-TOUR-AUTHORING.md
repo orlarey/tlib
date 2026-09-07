@@ -474,7 +474,10 @@ invisible in the result, where an unchecked claim reads exactly like a
 checked one that held; the second is visible, and can be written in the
 document's own header. A colleague running a benchmark put it in one
 line: an absence would have read as a defeat rather than as never having
-been raced. So **when you must reduce, prefer the reduction that leaves a
+been raced. The full field was then raced, and nine candidates the
+shortlist would have dropped won at least once — the invisible cut
+would have hidden nine real results and looked exactly like a clean
+sweep. So **when you must reduce, prefer the reduction that leaves a
 trace in the artifact**, and say in the artifact which one you took. A
 smaller verification that states its own extent is worth more than a
 larger one that silently chose what to look at.
