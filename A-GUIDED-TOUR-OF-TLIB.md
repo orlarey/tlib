@@ -390,7 +390,7 @@ second fails. This is why the example above names its constructors
 language is the convention that keeps independent clients out of each other's
 way. What signatures make disjoint is the *opcode space*, not the *name space*.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Origins
 
@@ -557,7 +557,7 @@ form and let structural sharing apply to *it*.
 ## In the code
 
 The whole mechanism is `CTree::make` in
-[tree.cpp:374](tlib/tree.cpp#L374):
+[tree.cpp:379](tlib/tree.cpp#L379):
 
 ```cpp
 size_t hk = calcTreeHash(n, ar, tbl);
@@ -583,7 +583,7 @@ type system enforces outright.
 
 Two details in those lines matter more than their size suggests.
 
-`equiv` ([tree.cpp:336](tlib/tree.cpp#L336)) compares the node and then the
+`equiv` ([tree.cpp:341](tlib/tree.cpp#L341)) compares the node and then the
 children **by pointer**, not recursively:
 
 ```cpp
@@ -597,7 +597,7 @@ This is the induction of the previous section made concrete. A structural
 comparison here would make construction quadratic; pointer comparison is legal
 only because every child was itself obtained from `make`.
 
-`calcTreeHash` ([tree.cpp:363](tlib/tree.cpp#L363)) combines the raw bits of
+`calcTreeHash` ([tree.cpp:368](tlib/tree.cpp#L368)) combines the raw bits of
 the node with the *stored hash keys* of the children — again not by traversing
 them — so hashing a node is $O(\mathrm{arity})$ regardless of depth. The hash
 is only a bucket index: correctness rests entirely on `equiv`, and a collision
@@ -652,7 +652,7 @@ differ; that is a separate problem, and the reason `fCanonHash` exists.
 **`fCanonHash`** ([tree.hh:290](tlib/tree.hh#L290)) exists for the cases where
 that is not good enough. It is a structural hash synthesised at construction
 from the node's canonical hash and the children's — and the way the children
-are combined ([tree.cpp:229](tlib/tree.cpp#L229)) is worth a second look,
+are combined ([tree.cpp:232](tlib/tree.cpp#L232)) is worth a second look,
 because the obvious formula is wrong here:
 
 ```cpp
@@ -670,7 +670,7 @@ Faust's associative-commutative judge and was fixed there too; the pattern is
 now banned in both.
 
 `canonicalTreeLess`
-([tree.cpp:280](tlib/tree.cpp#L280)) uses it as the primary key of a total
+([tree.cpp:285](tlib/tree.cpp#L285)) uses it as the primary key of a total
 order derived from *values only* — symbols compared by name, ties broken
 structurally. Two processes that build the same term values order them
 identically, whatever their construction history, which is what canonical forms
@@ -678,7 +678,7 @@ need. One case has to be handled explicitly, and its history is the best warning
 this chapter can give. A node carrying a **raw pointer** payload has no value
 to hash. The library therefore keeps a **registry**
 ([node.hh:77-83](tlib/node.hh#L77-L83), implemented at
-[tree.cpp:112-126](tlib/tree.cpp#L112-L126)): a pointer whose *name* was
+[tree.cpp:112-129](tlib/tree.cpp#L112-L129)): a pointer whose *name* was
 declared at creation hashes by that name — value-derived, identical across
 builds — and only an unregistered pointer falls back to its address. A
 diagnostic goes with it: with `TLIB_DBJ_POINTER_CENSUS=1` set, a de Bruijn form
@@ -726,7 +726,7 @@ constructed trees never receive a single property
 ([tree.hh:183](tlib/tree.hh#L183)), which is why property lists are allocated
 lazily rather than being an inline member; and most insertions land on an empty
 bucket, which is why the load-factor check runs only when the bucket was
-already occupied ([tree.cpp:393](tlib/tree.cpp#L393)).
+already occupied ([tree.cpp:398](tlib/tree.cpp#L398)).
 
 ## Invariants and non-goals
 
@@ -783,7 +783,7 @@ no obvious owner to release it. The library does not attempt reclamation during
 a session at all — see §4 for what it does instead, and why that suits a
 compiler.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Origins
 
@@ -970,7 +970,8 @@ control characters on the way in, as the invariants below record.
 
 ## In the code
 
-`Node` is at [node.hh:85](tlib/node.hh#L85), and it is exactly the tagged union
+`Node` is at [node.hh:101](tlib/node.hh#L101), and it is exactly the tagged
+union
 described above:
 
 ```cpp
@@ -979,14 +980,14 @@ class Node : public Garbageable {
     union { int i; double f; Sym s; void* p; int64_t v; } fData;
 ```
 
-Equality ([node.hh:191](tlib/node.hh#L191)) is the one line the rest of the
+Equality ([node.hh:210](tlib/node.hh#L210)) is the one line the rest of the
 library leans on:
 
 ```cpp
 bool operator==(const Node& n) const { return fType == n.fType && payload() == n.payload(); }
 ```
 
-`payload()` ([node.hh:101](tlib/node.hh#L101)) reads the union as one opaque
+`payload()` ([node.hh:117](tlib/node.hh#L117)) reads the union as one opaque
 64-bit word, whatever member was actually written — the comparison is on the
 payload's *bits*, not on its value. It is spelled with `memcpy` (the C++17
 spelling of `std::bit_cast`, which compiles to a single load) rather than by
@@ -995,7 +996,7 @@ the standard does not.
 
 This explains a detail that would otherwise look superstitious: the narrower
 constructors write `fData.f = 0.0` *before* storing their value
-([node.hh:145-177](tlib/node.hh#L145-L177)). Zeroing the widest member first
+([node.hh:164-196](tlib/node.hh#L164-L196)). Zeroing the widest member first
 makes the unused bits deterministic, so that two nodes built from the same
 `int` compare equal — which is what makes a whole-word comparison exact for
 payloads narrower than the word.
@@ -1013,7 +1014,7 @@ behaviour they depart from.
 
 Pattern matching is a family of predicates rather than a `switch` on the tag —
 `isInt(n, &i)`, `isDouble(n, &d)`, `isSym(n, &s)`
-([node.hh:227](tlib/node.hh#L227) onwards), each testing the tag and extracting
+([node.hh:246](tlib/node.hh#L246) onwards), each testing the tag and extracting
 the payload in one call. Their tree-level counterparts `tree2int`, `tree2str`
 and friends ([tree.hh:419](tlib/tree.hh#L419) onwards) do the same one level
 up, raising a TLIB error instead of returning false.
@@ -1084,7 +1085,7 @@ alpha-equivalent recursive terms land on the same pointer.
 `Node`, its equality, its canonical hash and its predicates. The pointer
 payload exists precisely so that this is rarely necessary.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Origins
 
@@ -1245,7 +1246,7 @@ The registry supports individual deletion mechanically — `operator delete`
 removes the pointer from the list ([garbageable.cpp:95](tlib/garbageable.cpp#L95))
 — but that is a property of the allocator, not a licence. **An interned tree or
 symbol must never be deleted individually.** `CTree::~CTree`
-([tree.cpp:325](tlib/tree.cpp#L325)) deliberately does not remove the node from
+([tree.cpp:330](tlib/tree.cpp#L330)) deliberately does not remove the node from
 the construction table, so deleting one leaves a dangling entry that the next
 lookup will dereference. The same holds for `Symbol` and its table. Individual
 deletion is for ordinary `Garbageable` objects that no table points at — and
@@ -1328,7 +1329,7 @@ destructor, unused by the library itself but still live downstream, where
 Faust's audio types are `Type = P<AudioType>`. Read it as a null-safety
 convenience, never as ownership.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Origins
 
@@ -1592,7 +1593,7 @@ is only reclaimed at the end of the session, like everything else.
 **None of this is thread-safe.** Properties are ordinary mutable state on
 shared nodes, and §4's single-thread rule covers them.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Origins
 
@@ -1799,7 +1800,7 @@ the ancestors of the general rewriting machinery, and `substitute` is one of
 the two functions whose per-call fresh keys produced the pathological node
 carrying tens of thousands of properties that §5 mentioned.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -2182,7 +2183,7 @@ different bits overwrites the byte, and no tree built earlier is recomputed. The
 ordering is a discipline the API encourages and does not guarantee, and a late
 change leaves old and new trees silently disagreeing.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -2426,7 +2427,7 @@ representations", and it is checked, along with the identity of `rec` and
 `ref`, in [tour-examples.cpp:234](tour-examples.cpp#L234).
 
 One consequence of deriving a name from a hash deserves to be stated rather
-than hidden: two structurally *different* groups whose 64-bit canonical hashes
+than hidden: two structurally *different* groups whose canonical hashes
 collide would receive the same variable name. That is not a silent corruption —
 the second group would attempt to define an already-defined variable with a
 different body, which the protocol below makes a fatal error.
@@ -2773,7 +2774,7 @@ inside a member that dies. Two of them also pin the identity claim: the live
 cycle returns its input pointer, and collecting an already-collected term
 returns the same pointer again.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -2812,8 +2813,12 @@ reaches them. Its input must be closed, and its traversal recurses to the depth
 of the term.
 
 **Hash collisions are detected, not tolerated.** Content-derived names rest on
-a 64-bit hash; a collision between structurally different groups surfaces as a
-fatal redefinition, never as two different terms silently sharing a name.
+a hash mixed in a 64-bit word and then narrowed to `size_t` — the identity on
+a native build, a fold of the high word into the low one where `size_t` is
+32 bits, as on the wasm32 target, which makes collisions correspondingly
+likelier there. Either way a collision between structurally different groups
+surfaces as a fatal redefinition, never as two different terms silently
+sharing a name.
 
 **Aperture is a de Bruijn notion only.** Symbolic references count as zero, so
 `isClosed` says nothing about whether a symbolic term's variables are all
@@ -3231,7 +3236,7 @@ by the original while building from rewritten children, and exposes its memo so
 that nested arguments can be matched with their transforms. The full
 specification of both is [REWRITE-SPEC.md](REWRITE-SPEC.md).
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -3534,7 +3539,7 @@ permanent. Only values that depend on the component being iterated are
 from `RecPlan` ([tree.hh:542](tlib/tree.hh#L542)), memoised one per root per
 session, so repeated analyses of the same term share one Tarjan run.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -4118,7 +4123,7 @@ tamed by a finite-height domain. And the same computation run under all three
 strategies must give strictly equal maps — the canonicity theorem as a
 regression test.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
@@ -4311,7 +4316,7 @@ here !!!!"*), `dnfAnd` carries an *"A REVOIR !!!"*
 commutativity and one ordering example rather than an algebraic
 specification.
 
-*Code references verified at `f45665e`.*
+*Code references verified at `531bded`.*
 
 ## Invariants and non-goals
 
