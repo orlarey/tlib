@@ -345,11 +345,13 @@ bool checkHashConsing()
     Tree b = tree(symbol("*"), a, a);
     CHECK(b->branch(0) == b->branch(1));
 
-    // serial numbers give a stable deterministic order
+    // serial numbers give a stable deterministic order : the creation order.
+    // (The addresses do not : whether a later node has a greater address is
+    // the allocator's business -- Windows says no -- and nothing in tlib
+    // orders by address any more, every order reads the serial.)
     Tree t1 = tree(symbol("first"), tree(101));
     Tree t2 = tree(symbol("second"), tree(102));
     CHECK(t1->serial() < t2->serial());
-    CHECK(std::less<CTree*>()(t1, t2));
 
     return ok;
 }
