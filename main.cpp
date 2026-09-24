@@ -37,6 +37,7 @@ int main(int, const char**)
     r &= checkFixPointInterval();
     r &= checkRewrite();
     r &= checkGuardedRewrite();
+    r &= checkMinimalRewrite();
     r &= checkDnfCnf();
     r &= checkDescend();
     r &= checkDescendFixpoint();

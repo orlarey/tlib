@@ -1202,6 +1202,185 @@ bool checkGuardedRewrite()
 // DNF/CNF conditions
 //-----------------------------------------------------------------------------
 
+//-----------------------------------------------------------------------------
+// treeRewriteMinimal : a recursive group keeps its variable when its body
+// comes back unchanged (the unit checks of the minimal-rewrite specification)
+//-----------------------------------------------------------------------------
+
+bool checkMinimalRewrite()
+{
+    bool ok = true;
+
+    auto id     = [](Tree t) { return t; };
+    auto negate = [](Tree t) {
+        int i;
+        return isInt(t->node(), &i) ? tree(-i) : t;
+    };
+    auto is = [](Tree t, const char* s, int ar) { return t->node() == Node(symbol(s)) && t->arity() == ar; };
+    auto throws = [](auto&& f) {
+        try {
+            f();
+        } catch (const std::exception&) {
+            return true;
+        }
+        return false;
+    };
+
+    // without any group : exactly treeRewrite
+    Tree a  = tree(symbol("a"));
+    Tree t1 = tree(symbol("foo"), tree(symbol("g"), a, tree(1)), tree(symbol("b")));
+    CHECK(treeRewriteMinimal(t1, id) == t1);
+    CHECK(treeRewriteMinimal(t1, negate) == treeRewrite(t1, negate));
+
+    // identity on a group : the SAME pointer (the tour's r2 != r, reversed)
+    Tree x = tree(unique("X"));
+    Tree r = rec(x, tree(symbol("+"), tree(1), ref(x)));
+    CHECK(treeRewriteMinimal(r, id) == r);
+
+    // a modified body : a new name, the old definition intact, the
+    // self-reference following the new name
+    {
+        Tree v0 = nullptr, b0 = nullptr, v1 = nullptr, b1 = nullptr;
+        isRec(r, v0, b0);
+        Tree rr = treeRewriteMinimal(r, negate);
+        CHECK(rr != r);
+        CHECK(isRec(rr, v1, b1) && v1 != v0);
+        CHECK(tree2int(b1->branch(0)) == -1);
+        CHECK(b1->branch(1) == rr);
+        Tree v2 = nullptr, b2 = nullptr;
+        CHECK(isRec(r, v2, b2) && b2 == b0);
+        CHECK(alphaEquiv(rr, treeRewrite(r, negate)));
+    }
+
+    // ill-formed inputs are rejected : an undefined group, and cycles made of
+    // references alone
+    CHECK(throws([&] { treeRewriteMinimal(tree(symbol("f"), ref(tree(unique("U")))), id); }));
+    {
+        Tree y = tree(unique("Y"));
+        Tree ry = rec(y, ref(y));
+        CHECK(throws([&] { treeRewriteMinimal(ry, id); }));
+        Tree p = tree(unique("P")), q = tree(unique("Q"));
+        rec(p, ref(q));
+        rec(q, ref(p));
+        CHECK(throws([&] { treeRewriteMinimal(tree(symbol("f"), ref(p)), id); }));
+        // a reference that leads to a constructor is well formed : D(A) = B, D(B) = g(A)
+        Tree ra = tree(unique("A")), rb = tree(unique("B"));
+        rec(ra, ref(rb));
+        rec(rb, tree(symbol("g"), ref(ra)));
+        CHECK(treeRewriteMinimal(ref(ra), id) == ref(ra));
+    }
+
+    // a rewritten body that reduces to a cycle of references is rejected before
+    // its definition is posed : D(X) = f(X) under f(u) -> u
+    {
+        Tree z  = tree(unique("Z"));
+        Tree rz = rec(z, tree(symbol("f"), ref(z)));
+        auto strip = [&](Tree t) { return is(t, "f", 1) ? t->branch(0) : t; };
+        CHECK(throws([&] { treeRewriteMinimal(rz, strip); }));
+        Tree vz = nullptr, bz = nullptr;
+        CHECK(isRec(rz, vz, bz) && is(bz, "f", 1));  // the old definition is intact
+    }
+
+    // a projection shared between a kept body and the outside : the result is
+    // the input, and the rule is not called again on the outside occurrence
+    {
+        Tree w  = tree(unique("W"));
+        Tree gw = tree(symbol("g"), ref(w));
+        rec(w, tree(symbol("f"), gw));
+        Tree t     = tree(symbol("pair"), ref(w), gw);
+        int  calls = 0;
+        auto count = [&](Tree n) {
+            if (is(n, "g", 1)) {
+                calls++;
+            }
+            return n;
+        };
+        CHECK(treeRewriteMinimal(t, count) == t);
+        CHECK(calls == 1);
+    }
+
+    // a change undone by an ancestor : g(u) -> k(u), h(k(u)) -> h(g(u)). The
+    // body h(g(X)) comes back unchanged and X keeps its name, but the outside
+    // g(X), with no h above it, becomes k(X)
+    auto cancel = [&](Tree n) {
+        if (is(n, "g", 1)) {
+            return tree(symbol("k"), n->branch(0));
+        }
+        if (is(n, "h", 1) && is(n->branch(0), "k", 1)) {
+            return tree(symbol("h"), tree(symbol("g"), n->branch(0)->branch(0)));
+        }
+        return n;
+    };
+    {
+        Tree c = tree(unique("C"));
+        rec(c, tree(symbol("h"), tree(symbol("g"), ref(c))));
+        Tree t   = tree(symbol("pair"), ref(c), tree(symbol("g"), ref(c)));
+        Tree res = treeRewriteMinimal(t, cancel);
+        CHECK(res->branch(0) == ref(c));
+        CHECK(is(res->branch(1), "k", 1) && res->branch(1)->branch(0) == ref(c));
+        CHECK(alphaEquiv(res, treeRewrite(t, cancel)));
+    }
+
+    // a renamed lower group : X mentions Y, only Y's body changes, and X must
+    // be renamed too although nothing changes in its own body
+    {
+        Tree ly = tree(unique("LY")), lx = tree(unique("LX"));
+        rec(ly, tree(symbol("f"), tree(3), ref(ly)));
+        rec(lx, tree(symbol("g"), ref(lx), ref(ly)));
+        Tree res = treeRewriteMinimal(ref(lx), negate);
+        Tree v = nullptr, b = nullptr;
+        CHECK(res != ref(lx));
+        CHECK(isRec(res, v, b) && b->branch(0) == res && b->branch(1) != ref(ly));
+        CHECK(alphaEquiv(res, treeRewrite(ref(lx), negate)));
+    }
+
+    // mutual recursion : one component, kept whole under the identity,
+    // renamed whole when one body changes
+    {
+        Tree mx = tree(unique("MX")), my = tree(unique("MY"));
+        rec(mx, tree(symbol("f"), ref(my)));
+        rec(my, tree(symbol("g"), ref(mx), tree(1)));
+        CHECK(treeRewriteMinimal(ref(mx), id) == ref(mx));
+        Tree res = treeRewriteMinimal(ref(mx), negate);
+        Tree v = nullptr, b = nullptr;
+        CHECK(res != ref(mx) && isRec(res, v, b) && b->branch(0) != ref(my));
+        CHECK(alphaEquiv(res, treeRewrite(ref(mx), negate)));
+    }
+
+    // a change undone inside one body of a component does not stop I : the
+    // component is kept
+    {
+        Tree ux = tree(unique("UX")), uy = tree(unique("UY"));
+        rec(ux, tree(symbol("h"), tree(symbol("g"), ref(uy))));
+        rec(uy, tree(symbol("f"), ref(ux)));
+        CHECK(treeRewriteMinimal(ref(ux), cancel) == ref(ux));
+    }
+
+    // stopping I changes neither the result nor the rule's calls
+    {
+        Tree sx = tree(unique("SX")), sy = tree(unique("SY"));
+        rec(sx, tree(symbol("f"), tree(2), ref(sy)));
+        rec(sy, tree(symbol("g"), ref(sx), tree(symbol("h"), tree(symbol("g"), ref(sx)))));
+        for (int pass = 0; pass < 2; pass++) {
+            int  n1 = 0, n2 = 0;
+            auto c1 = [&](Tree n) { n1++; return pass ? cancel(n) : negate(n); };
+            auto c2 = [&](Tree n) { n2++; return pass ? cancel(n) : negate(n); };
+            Tree r1 = tlibrwm::rewriteMinimal(ref(sx), c1, true);
+            Tree r2 = tlibrwm::rewriteMinimal(ref(sx), c2, false);
+            CHECK(alphaEquiv(r1, r2));
+            CHECK(n1 == n2);
+        }
+    }
+
+    // the global property on the trees above : alpha-equivalent to treeRewrite
+    for (Tree t : {t1, r, tree(symbol("pair"), r, tree(symbol("g"), r))}) {
+        CHECK(alphaEquiv(treeRewriteMinimal(t, id), treeRewrite(t, id)));
+        CHECK(alphaEquiv(treeRewriteMinimal(t, negate), treeRewrite(t, negate)));
+    }
+
+    return ok;
+}
+
 bool checkDnfCnf()
 {
     bool ok = true;

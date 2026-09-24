@@ -25,6 +25,7 @@ bool checkFixPoint();
 bool checkFixPointInterval();
 bool checkRewrite();
 bool checkGuardedRewrite();
+bool checkMinimalRewrite();
 bool checkDnfCnf();
 bool checkErrorHandler();
 bool checkLifecycle();
