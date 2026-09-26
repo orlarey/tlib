@@ -3,7 +3,7 @@ document-style: rapport-a4
 author: The Faust Team
 title: A guided tour of TLIB
 subtitle: The tree library at the heart of the Faust compiler
-date: 2026-08-08
+date: 2026-09-26
 ---
 
 # Introduction
