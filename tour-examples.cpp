@@ -308,9 +308,9 @@ bool tourRewriting()
     CHECK(done->branch(0) == done->branch(1));
 
     // THE surprising one : rewriting a recursive term RENAMES it. Under the
-    // identity rule the result is alpha-equivalent, never equal -- forced by the
-    // immutability of recursive definitions (a reused variable would be a
-    // redefinition, which is fatal).
+    // identity rule the result is alpha-equivalent, never equal. A choice of
+    // treeRewrite, not a necessity : only a CHANGED body forbids reusing the
+    // variable ; the same body again would be an idempotent no-op.
     Tree x = tree(symbol("TourX"));
     Tree r = rec(x, tree(symbol("+"), tree(1), ref(x)));
     Tree r2 = treeRewrite(r, identity);
