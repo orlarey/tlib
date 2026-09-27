@@ -1477,6 +1477,113 @@ bool checkMinimalRewrite()
         CHECK(alphaEquiv(res, paired(ref(mx), pnegate, pid)));
     }
 
+    // the guard : what it cuts is never touched, not even a name
+    {
+        // a generator with its own group Z, read by a program group X, and a
+        // constant subtree the guard replaces
+        Tree z   = tree(unique("GZ"));
+        rec(z, tree(symbol("osc"), tree(2), ref(z)));
+        Tree gen = tree(symbol("gen"), tree(3), ref(z));
+        Tree k7  = tree(symbol("konst"), tree(7));
+        Tree x   = tree(unique("GX"));
+        rec(x, tree(symbol("h"), tree(symbol("rd"), gen, ref(x)), tree(1)));
+        Tree t = tree(symbol("pair"), ref(x), k7);
+
+        std::unordered_map<Tree, int> callsMin, callsOld;
+        auto guardOf = [&](std::unordered_map<Tree, int>& calls) {
+            return [&](Tree s) -> std::optional<Tree> {
+                calls[s]++;
+                if (is(s, "gen", 2)) {
+                    return s;  // opaque
+                }
+                if (is(s, "konst", 1)) {
+                    return s->branch(0);  // replaced
+                }
+                return std::nullopt;
+            };
+        };
+        std::unordered_set<Tree> cutNodes = inputNodes(gen);
+        bool                     ruleCut  = false;
+        auto spy = [&](Tree n) {
+            ruleCut = ruleCut || cutNodes.count(n) > 0;
+            return negate(n);
+        };
+
+        // identity : the group X keeps its name, the generator and Z are untouched,
+        // the replacement cut still applies outside
+        Tree ri = treeRewriteMinimal(t, guardOf(callsMin), id);
+        CHECK(ri->branch(0) == ref(x));
+        CHECK(ri->branch(1) == tree(7));
+        CHECK(alphaEquiv(ri, treeRewrite(t, guardOf(callsOld), id)));
+
+        // negate : X is renamed, the generator inside is the input node itself
+        callsMin.clear();
+        callsOld.clear();
+        Tree rn = treeRewriteMinimal(t, guardOf(callsMin), spy);
+        CHECK(alphaEquiv(rn, treeRewrite(t, guardOf(callsOld), negate)));
+        CHECK(!ruleCut);
+        Tree v = nullptr, b = nullptr;
+        CHECK(rn->branch(0) != ref(x) && isRec(rn->branch(0), v, b));
+        CHECK(b->branch(0)->branch(0) == gen);  // the cut kept Z, and the 3 not negated
+        CHECK(tree2int(b->branch(1)) == -1);
+
+        // the guard : at most once per node, never on a group, and only on nodes
+        // the current iterator shows it
+        bool once = true, sub = true, onRec = false;
+        for (auto& e : callsMin) {
+            Tree vv = nullptr, bb = nullptr;
+            once  = once && e.second == 1;
+            sub   = sub && callsOld.count(e.first) > 0;
+            onRec = onRec || isRec(e.first, vv, bb);
+        }
+        CHECK(once && sub && !onRec);
+    }
+    {
+        // a cut that mentions a group of the component : the component is renamed
+        // even under the identity, and the cut keeps the old name inside
+        Tree x   = tree(unique("CX"));
+        Tree cut = tree(symbol("opaque"), ref(x));
+        rec(x, tree(symbol("h"), tree(1), cut));
+        auto guard = [&](Tree s) -> std::optional<Tree> {
+            if (s == cut) {
+                return s;
+            }
+            return std::nullopt;
+        };
+        Tree res = treeRewriteMinimal(ref(x), guard, id);
+        Tree v = nullptr, b = nullptr;
+        CHECK(res != ref(x) && isRec(res, v, b));
+        CHECK(b->branch(1) == cut);  // the old name, inside the cut
+        CHECK(alphaEquiv(res, treeRewrite(ref(x), guard, id)));
+    }
+    {
+        // the paired form with guard and seam : never shows the guard a body cell,
+        // and agrees with treeRewritePaired
+        Tree z   = tree(unique("PGZ"));
+        rec(z, list1(tree(symbol("osc"), tree(2), ref(z))));
+        Tree gen = tree(symbol("gen"), tree(3), ref(z));
+        Tree x   = tree(unique("PGX"));
+        Tree bx  = list2(tree(symbol("rd"), gen, ref(x)), tree(symbol("f"), tree(1), ref(x)));
+        rec(x, bx);
+        std::unordered_set<Tree> cells;
+        for (Tree l = bx; isList(l); l = tl(l)) {
+            cells.insert(l);
+        }
+        bool sawCell = false;
+        auto guard = [&](Tree s) -> std::optional<Tree> {
+            sawCell = sawCell || cells.count(s) > 0;
+            if (is(s, "gen", 2)) {
+                return s;
+            }
+            return std::nullopt;
+        };
+        CHECK(treeRewriteMinimalPaired(ref(x), guard, pid, pid) == ref(x));
+        std::unordered_map<Tree, Tree> memo;
+        Tree res = treeRewriteMinimalPaired(ref(x), guard, pnegate, wrap);
+        CHECK(alphaEquiv(res, treeRewritePaired(ref(x), guard, pnegate, memo, wrap)));
+        CHECK(!sawCell);
+    }
+
     return ok;
 }
 
