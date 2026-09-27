@@ -1378,6 +1378,105 @@ bool checkMinimalRewrite()
         CHECK(alphaEquiv(treeRewriteMinimal(t, negate), treeRewrite(t, negate)));
     }
 
+    // treeRewriteMinimalPaired : the paired rule and the definition seam
+    auto pid     = [](Tree, Tree rebuilt) { return rebuilt; };
+    auto pnegate = [&](Tree, Tree rebuilt) { return negate(rebuilt); };
+    auto wrap    = [](Tree, Tree rebuilt) { return tree(symbol("FTZ"), rebuilt); };
+    auto paired  = [](Tree t, auto&& rule, auto&& defRule) {
+        std::unordered_map<Tree, Tree> memo;
+        return treeRewritePaired(t, rule, memo, defRule);
+    };
+    // every node of t, group bodies included : the only nodes the rule may see as orig
+    auto inputNodes = [](Tree t) {
+        std::unordered_set<Tree> seen;
+        std::vector<Tree>        stack{t};
+        while (!stack.empty()) {
+            Tree s = stack.back();
+            stack.pop_back();
+            if (!seen.insert(s).second) {
+                continue;
+            }
+            Tree var = nullptr, body = nullptr;
+            if (isRec(s, var, body)) {
+                stack.push_back(body);
+                continue;
+            }
+            for (int k = 0; k < s->arity(); k++) {
+                stack.push_back(s->branch(k));
+            }
+        }
+        return seen;
+    };
+    {
+        // two definitions in one group, a shared subtree at a definition root and
+        // at an inner position, and a lower group Y mentioned by X
+        Tree shared = tree(symbol("s"), tree(5));
+        Tree py = tree(unique("PY")), px = tree(unique("PX"));
+        rec(py, list1(tree(symbol("f"), tree(4), ref(py))));
+        rec(px, list2(shared, tree(symbol("f"), shared, ref(px), ref(py))));
+        Tree t = tree(symbol("pair"), ref(px), tree(symbol("g"), shared));
+
+        // the identity keeps every group : the same pointer
+        CHECK(treeRewriteMinimalPaired(t, pid) == t);
+        CHECK(treeRewriteMinimalPaired(t, pid, pid) == t);
+
+        // the definition seam alone renames every group, the lower one included
+        Tree rw = treeRewriteMinimalPaired(t, pid, wrap);
+        CHECK(rw != t);
+        CHECK(alphaEquiv(rw, paired(t, pid, wrap)));
+        Tree vx = nullptr, bx = nullptr;
+        CHECK(isRec(rw->branch(0), vx, bx));
+        CHECK(is(hd(bx), "FTZ", 1) && hd(bx)->branch(0) == shared);  // wrapped at the slot
+        CHECK(hd(tl(bx))->branch(0)->branch(0) == shared);           // inner position unwrapped
+        CHECK(rw->branch(1) == tree(symbol("g"), shared));           // outside untouched
+
+        // a change in the lower group only : X is renamed through its reference to Y
+        Tree rn = treeRewriteMinimalPaired(t, pnegate);
+        CHECK(alphaEquiv(rn, paired(t, pnegate, pid)));
+        CHECK(rn->branch(0) != ref(px));
+
+        // the rule sees input nodes only, never a renamed one, and exactly the
+        // nodes treeRewritePaired shows it
+        std::unordered_set<Tree> in = inputNodes(t);
+        std::unordered_set<Tree> seenMin, seenOld;
+        bool                     onlyInput = true;
+        auto                     spyMin    = [&](Tree orig, Tree rebuilt) {
+            onlyInput = onlyInput && in.count(orig) > 0;
+            seenMin.insert(orig);
+            return negate(rebuilt);
+        };
+        auto spyOld = [&](Tree orig, Tree rebuilt) {
+            seenOld.insert(orig);
+            return negate(rebuilt);
+        };
+        treeRewriteMinimalPaired(t, spyMin, wrap);
+        paired(t, spyOld, wrap);
+        CHECK(onlyInput);
+        CHECK(seenMin == seenOld);
+    }
+    {
+        // a definition seam that undoes the rule at the slot keeps the group : the
+        // rule wraps every f in k, the seam unwraps the definition root. The seam
+        // works on the rebuilt definition : returning orig instead would bring
+        // back the old name inside a body being renamed (the renaming condition)
+        Tree qx = tree(unique("QX"));
+        rec(qx, list1(tree(symbol("f"), tree(4), ref(qx))));
+        auto kwrap  = [&](Tree, Tree rebuilt) { return is(rebuilt, "f", 2) ? tree(symbol("k"), rebuilt) : rebuilt; };
+        auto unwrap = [&](Tree, Tree rebuilt) { return is(rebuilt, "k", 1) ? rebuilt->branch(0) : rebuilt; };
+        CHECK(treeRewriteMinimalPaired(ref(qx), kwrap, unwrap) == ref(qx));
+        CHECK(alphaEquiv(treeRewriteMinimalPaired(ref(qx), kwrap, unwrap), paired(ref(qx), kwrap, unwrap)));
+    }
+    {
+        // mutual recursion with list bodies : kept whole, renamed whole
+        Tree mx = tree(unique("PMX")), my = tree(unique("PMY"));
+        rec(mx, list1(tree(symbol("f"), ref(my))));
+        rec(my, list2(tree(symbol("g"), ref(mx)), tree(1)));
+        CHECK(treeRewriteMinimalPaired(ref(mx), pid, pid) == ref(mx));
+        Tree res = treeRewriteMinimalPaired(ref(mx), pnegate, pid);
+        CHECK(res != ref(mx));
+        CHECK(alphaEquiv(res, paired(ref(mx), pnegate, pid)));
+    }
+
     return ok;
 }
 

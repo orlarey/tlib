@@ -440,10 +440,14 @@ inline void checkWellFormed(const RecPlan& plan)
     }
 }
 
-// the pair (I(s), R(s)) of one component ; I is nullptr once no longer built
-template <class Rule>
+// the pair (I(s), R(s)) of one component ; I is nullptr once no longer built.
+// The rule is paired, rule(orig, rebuilt) : orig is always an input node, never
+// a renamed one, so its annotations stay readable while C takes fresh names.
+template <class Rule, class DefRule>
 struct Component {
     Rule&                                             rule;
+    DefRule&                                          defRule;
+    bool                                              listBodies;  // the definition seam of treeRewritePaired
     std::unordered_map<Tree, Tree>&                   G;
     std::unordered_map<Tree, Tree>                    nu;  // SYMREC node of C -> fresh variable
     std::unordered_map<Tree, std::pair<Tree, Tree>>   P;
@@ -487,29 +491,56 @@ struct Component {
                 }
                 i = ci ? tree(s->node(), bi) : s;
             }
-            r = rule(cr ? tree(s->node(), br) : s);
+            r = rule(s, cr ? tree(s->node(), br) : s);
         }
         P[s] = {i, r};
         return {i, r};
     }
+
+    // The pair of a group body. With the definition seam, a list-shaped body is
+    // taken definition by definition : defRule applies to R only, at its slot, and
+    // neither the cells nor the wrapped definitions enter P, as in treeRewritePaired.
+    std::pair<Tree, Tree> visitBody(Tree body)
+    {
+        if (!listBodies) {
+            return visit(body);
+        }
+        std::vector<std::pair<Tree, Tree>> defs;
+        Tree                               l = body;
+        while (isList(l)) {
+            Tree d  = hd(l);
+            auto pr = visit(d);
+            defs.push_back({pr.first, defRule(d, pr.second)});
+            l = tl(l);
+        }
+        auto tail = visit(l);
+        Tree i = tail.first, r = tail.second;
+        for (auto it = defs.rbegin(); it != defs.rend(); ++it) {
+            if (compare) {
+                i = cons(it->first, i);
+            }
+            r = cons(it->second, r);
+        }
+        return {i, r};
+    }
 };
 
-template <class Rule>
-Tree rewriteMinimal(Tree root, Rule& rule, bool stopI)
+template <class Rule, class DefRule>
+Tree rewriteMinimalCore(Tree root, Rule& rule, DefRule& defRule, bool listBodies, bool stopI)
 {
     const RecPlan plan(root);
     checkWellFormed(plan);
     std::unordered_map<Tree, Tree> G;  // the decided images, keyed by the input nodes
 
     for (const std::vector<Tree>& comp : plan.components()) {
-        Component<Rule> C{rule, G, {}, {}, true};
+        Component<Rule, DefRule> C{rule, defRule, listBodies, G, {}, {}, true};
         for (Tree g : comp) {
             C.nu[g] = tree(unique("W"));
         }
         std::vector<Tree> B;
         bool              differs = false;
         for (Tree g : comp) {
-            auto pr = C.visit(groupBody(g));
+            auto pr = C.visitBody(groupBody(g));
             B.push_back(pr.second);
             if (C.compare && pr.first != pr.second) {
                 differs = true;
@@ -581,7 +612,7 @@ Tree rewriteMinimal(Tree root, Rule& rule, bool stopI)
             br[k] = finish(s->branch(k));
             c     = c || br[k] != s->branch(k);
         }
-        Tree res = rule(c ? tree(s->node(), br) : s);
+        Tree res = rule(s, c ? tree(s->node(), br) : s);
         G[s]     = res;
         return res;
     };
@@ -590,12 +621,46 @@ Tree rewriteMinimal(Tree root, Rule& rule, bool stopI)
     return u;
 }
 
+template <class Rule>
+Tree rewriteMinimal(Tree root, Rule& rule, bool stopI)
+{
+    auto paired = [&rule](Tree, Tree rebuilt) { return rule(rebuilt); };
+    auto nodef  = [](Tree, Tree rebuilt) { return rebuilt; };
+    return rewriteMinimalCore(root, paired, nodef, false, stopI);
+}
+
 }  // namespace tlibrwm
 
 template <class Rule>
 Tree treeRewriteMinimal(Tree root, Rule&& rule)
 {
     return tlibrwm::rewriteMinimal(root, rule, true);
+}
+
+/**
+ * treeRewriteMinimalPaired : treeRewritePaired, with the minimal naming of
+ * treeRewriteMinimal. The rule receives rule(orig, rebuilt), orig being always
+ * an input node ; defRule(origDef, rebuiltDef) wraps each definition of a
+ * list-shaped group body at its slot, positionally, as in treeRewritePaired.
+ * A wrapped definition that differs from its plain rewrite makes its body
+ * differ, so its component is renamed.
+ *
+ * The precondition on the rule becomes one on its second argument only : for a
+ * renaming nu of the groups, rule(s, x.nu) = rule(s, x).nu, and the same for
+ * defRule. Under this condition the result is alpha-equivalent to the one of
+ * treeRewritePaired.
+ */
+template <class Rule, class DefRule>
+Tree treeRewriteMinimalPaired(Tree root, Rule&& rule, DefRule&& defRule)
+{
+    return tlibrwm::rewriteMinimalCore(root, rule, defRule, true, true);
+}
+
+template <class Rule>
+Tree treeRewriteMinimalPaired(Tree root, Rule&& rule)
+{
+    auto nodef = [](Tree, Tree rebuilt) { return rebuilt; };
+    return tlibrwm::rewriteMinimalCore(root, rule, nodef, true, true);
 }
 
 #endif
