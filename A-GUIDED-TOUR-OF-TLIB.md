@@ -390,7 +390,7 @@ second fails. This is why the example above names its constructors
 language is the convention that keeps independent clients out of each other's
 way. What signatures make disjoint is the *opcode space*, not the *name space*.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Origins
 
@@ -572,10 +572,10 @@ else   { statsTreeCreated(); /* grow if needed, then allocate */ }
 ```
 
 Everything else is detail around those seven lines. `CTree` itself is defined
-at [tree.hh:159](tlib/tree.hh#L159) (forward-declared at
-[tree.hh:108](tlib/tree.hh#L108)); the public constructors `tree(n)`,
+at [tree.hh:160](tlib/tree.hh#L160) (forward-declared at
+[tree.hh:109](tlib/tree.hh#L109)); the public constructors `tree(n)`,
 `tree(n, a)`, … `tree(n, br)` at
-[tree.hh:371-410](tlib/tree.hh#L371-L410) are thin wrappers over `make`. The
+[tree.hh:372-411](tlib/tree.hh#L372-L411) are thin wrappers over `make`. The
 `CTree` constructors are protected, so no caller can bypass the table and
 produce an unregistered node; a derived class still could, and *no junk* is
 therefore an invariant of the API as it is meant to be used rather than one the
@@ -606,11 +606,11 @@ costs a walk down `fNext`, never a wrong answer.
 Beyond the sharing itself, `CTree` stores three things derived from the term
 that are worth knowing about now, since later sections rely on them.
 
-**`fSerial`** ([tree.hh:283](tlib/tree.hh#L283)) is a counter incremented at
+**`fSerial`** ([tree.hh:284](tlib/tree.hh#L284)) is a counter incremented at
 each construction, and the named comparator `treeorder`
-([tree.hh:123](tlib/tree.hh#L123)) compares on it, so that an ordered container
+([tree.hh:124](tlib/tree.hh#L124)) compares on it, so that an ordered container
 of trees — spelled `TreeSet` or `TreeMap<V>`
-([tree.hh:140-142](tlib/tree.hh#L140-L142)) — iterates in a defined order
+([tree.hh:141-143](tlib/tree.hh#L141-L143)) — iterates in a defined order
 instead of address order. Determinism of the compiler output
 depends on this: addresses vary from run to run for reasons no one controls,
 whereas a serial is a function of construction order alone — so a deterministic
@@ -665,7 +665,7 @@ sequenced, the second order bought nothing the first did not, and it was
 removed — together with the machinery it needed to stay sound, a registry
 naming the pointer payloads that have no value to hash.
 
-**`fAperture` and `fContains`** ([tree.hh:204-205](tlib/tree.hh#L204-L205)) are
+**`fAperture` and `fContains`** ([tree.hh:205-206](tlib/tree.hh#L205-L206)) are
 synthesised attributes: small facts about the whole subterm — how many free de
 Bruijn levels it has, whether it contains a recursive node — computed once in
 the constructor and read in $O(1)$ ever after. They are the degenerate case of
@@ -690,7 +690,7 @@ of its de Bruijn references still point outside it, which is what makes it
 
 Two measurements on real Faust programs give the practical scale: about 72% of
 constructed trees never receive a single property
-([tree.hh:182](tlib/tree.hh#L182)), which is why property lists are allocated
+([tree.hh:183](tlib/tree.hh#L183)), which is why property lists are allocated
 lazily rather than being an inline member; and most insertions land on an empty
 bucket, which is why the load-factor check runs only when the bucket was
 already occupied ([tree.cpp:287](tlib/tree.cpp#L287)).
@@ -719,7 +719,7 @@ normalise anything on your behalf. Normalisation is a client's fold or rewrite
 determinism, so `TreeSet` and `TreeMap<V>` exist and should always be used. The
 guarantee reaches past the standard library too: `DirectedGraph`'s ordering
 customisation point resolves to the same serial order for trees
-([tree.hh:132-135](tlib/tree.hh#L132-L135)), so a graph built over trees — and
+([tree.hh:133-136](tlib/tree.hh#L133-L136)), so a graph built over trees — and
 every algorithm that iterates one — is ordered by creation rather than by
 address.
 This was once arranged by specialising `std::less<CTree*>` instead — which is
@@ -749,7 +749,7 @@ no obvious owner to release it. The library does not attempt reclamation during
 a session at all — see §4 for what it does instead, and why that suits a
 compiler.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Origins
 
@@ -979,7 +979,7 @@ Pattern matching is a family of predicates rather than a `switch` on the tag —
 `isInt(n, &i)`, `isDouble(n, &d)`, `isSym(n, &s)`
 ([node.hh:192](tlib/node.hh#L192) onwards), each testing the tag and extracting
 the payload in one call. Their tree-level counterparts `tree2int`, `tree2str`
-and friends ([tree.hh:413](tlib/tree.hh#L413) onwards) do the same one level
+and friends ([tree.hh:414](tlib/tree.hh#L414) onwards) do the same one level
 up, raising a TLIB error instead of returning false.
 
 Symbols are in [symbol.hh:88](tlib/symbol.hh#L88) and
@@ -1042,7 +1042,7 @@ alpha-equivalent recursive terms land on the same pointer.
 `Node`, its equality and its predicates. The pointer
 payload exists precisely so that this is rarely necessary.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Origins
 
@@ -1286,7 +1286,7 @@ destructor, unused by the library itself but still live downstream, where
 Faust's audio types are `Type = P<AudioType>`. Read it as a null-safety
 convenience, never as ownership.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Origins
 
@@ -1415,7 +1415,7 @@ denotes, and §2 showed the gap between the two is unbounded.
 ## In the code
 
 The mechanism on the node is four short methods on `CTree`
-([tree.hh:328-357](tlib/tree.hh#L328-L357)):
+([tree.hh:329-358](tlib/tree.hh#L329-L358)):
 
 ```cpp
 typedef std::map<Tree, Tree> plist;   // both key and value are Trees
@@ -1425,7 +1425,7 @@ Tree getProperty(Tree key);           // nullptr when absent
 
 Everything is a tree, including the key — which is what makes the mechanism
 untyped and universal. `plist` is allocated **lazily**
-([tree.hh:182-189](tlib/tree.hh#L182-L189)): about 72% of nodes never receive a
+([tree.hh:183-190](tlib/tree.hh#L183-L190)): about 72% of nodes never receive a
 property, so an always-present member would be paid for by three nodes out of
 four for nothing. The comment there also records why it is a `std::map` rather
 than a flat scanned buffer: one real Faust file has a single node carrying tens
@@ -1550,7 +1550,7 @@ is only reclaimed at the end of the session, like everything else.
 **None of this is thread-safe.** Properties are ordinary mutable state on
 shared nodes, and §4's single-thread rule covers them.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Origins
 
@@ -1757,7 +1757,7 @@ the ancestors of the general rewriting machinery, and `substitute` is one of
 the two functions whose per-call fresh keys produced the pathological node
 carrying tens of thousands of properties that §5 mentioned.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
@@ -2010,7 +2010,7 @@ later and worth knowing because it is the one place a client gets a bit inside
 
 §2 introduced `fContains`, eight synthesised bits meaning "this kind of
 construct occurs here or below", combined by union over the branches. Those
-eight are **partitioned** ([tree.hh:248-255](tlib/tree.hh#L248-L255)): the low
+eight are **partitioned** ([tree.hh:249-256](tlib/tree.hh#L249-L256)): the low
 nibble is TLIB's, with rules decidable from the node alone; the high nibble
 belongs to the client and TLIB never interprets it.
 
@@ -2139,7 +2139,7 @@ different bits overwrites the byte, and no tree built earlier is recomputed. The
 ordering is a discipline the API encourages and does not guarantee, and a late
 change leaves old and new trees silently disagreeing.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
@@ -2391,7 +2391,7 @@ detect.
 ## In the code
 
 Everything lives in [recursive-tree.cpp](tlib/recursive-tree.cpp), with the API
-in [tree.hh:443-511](tlib/tree.hh#L443-L511).
+in [tree.hh:444-512](tlib/tree.hh#L444-L512).
 
 The de Bruijn constructors are one line each
 ([recursive-tree.cpp:175-190](tlib/recursive-tree.cpp#L175-L190)): `rec(body)`
@@ -2406,7 +2406,7 @@ immutability. Branches are immutable; **properties are not**. A symbolic
 recursive node is hash-consed by its *name*, so calling `rec(id, body')` a
 second time with a different body would silently change what every existing
 holder of that pointer means. The rules
-([tree.hh:449-464](tlib/tree.hh#L449-L464), enforced at
+([tree.hh:450-465](tlib/tree.hh#L450-L465), enforced at
 [recursive-tree.cpp:217-229](tlib/recursive-tree.cpp#L217-L229)) are therefore:
 
 - `ref(id)` creates the node with no definition;
@@ -2452,7 +2452,7 @@ of its hash-consed de Bruijn form, which alpha-equivalent groups share. A cached
 `deBruijn2SymCached`, stores the result as a property so a repeated conversion
 of the same term costs a lookup.
 
-`sym2deBruijn` ([recursive-tree.cpp:837](tlib/recursive-tree.cpp#L837)) is the
+`sym2deBruijn` ([recursive-tree.cpp:848](tlib/recursive-tree.cpp#L848)) is the
 harder direction and the most engineered function in the library, because
 mutual recursion has to be handled with a single-binder notation. It is
 organised around the **strongly connected components** of the dependency graph
@@ -2465,15 +2465,15 @@ keyed by term alone, open ones by (term, environment), so environments stay
 small and shared closed sub-DAGs are converted exactly once.
 
 Two ways to test alpha-equivalence coexist, and the header is honest about
-which to use ([tree.hh:506-511](tlib/tree.hh#L506-L511)): `areEquiv` converts
+which to use ([tree.hh:507-512](tlib/tree.hh#L507-L512)): `areEquiv` converts
 both sides and compares, which is the theorem but is super-linear on large
-nests; `alphaEquiv` ([recursive-tree.cpp:935](tlib/recursive-tree.cpp#L935)) is
+nests; `alphaEquiv` ([recursive-tree.cpp:946](tlib/recursive-tree.cpp#L946)) is
 a pair-memoised walk carrying a variable bijection, linear in distinct pairs,
 and is what validations should call.
 
-Finally `canonicalizeRecNames` ([recursive-tree.cpp:991](tlib/recursive-tree.cpp#L991))
+Finally `canonicalizeRecNames` ([recursive-tree.cpp:1002](tlib/recursive-tree.cpp#L1002))
 renames a term's recursive groups in dependency order as `R<instance>_<k>`. It
-is *not* a canonical form and [tree.hh:550-557](tlib/tree.hh#L550-L557) says so
+is *not* a canonical form and [tree.hh:560-567](tlib/tree.hh#L560-L567) says so
 carefully: the instance prefix is fresh per call, so alpha-equivalent inputs
 give alpha-equivalent — not pointer-equal — results. What *is*
 instance-independent is the resulting **order**: the variables are created in
@@ -2526,8 +2526,8 @@ That is the whole argument in one picture: **splitting is what makes the sharing
 reachable**. The canonical form of this chapter delivers only at the right
 granularity, and the granularity is not given by the syntax.
 
-`normalizeRecGroups` ([recursive-tree.cpp:1283](tlib/recursive-tree.cpp#L1283),
-declared at [tree.hh:559-591](tlib/tree.hh#L559-L591)) rebuilds a term on the
+`normalizeRecGroups` ([recursive-tree.cpp:1294](tlib/recursive-tree.cpp#L1294),
+declared at [tree.hh:569-601](tlib/tree.hh#L569-L601)) rebuilds a term on the
 real structure. Each component becomes one minimal `letrec`, emitted
 dependencies-first — the recursion of the rebuild *is* the topological order. A
 singleton component with no self-reference is not recursive at all, so its
@@ -2567,7 +2567,7 @@ inside a component are ordered — because the de Bruijn round trip unifies
 *names*, not *positions*, so without a canonical order two permuted twins would
 survive as distinct terms. And the graph is built with a seen-set **per walk**
 rather than a global one
-([recursive-tree.cpp:1285-1289](tlib/recursive-tree.cpp#L1285-L1289)): a
+([recursive-tree.cpp:1296-1300](tlib/recursive-tree.cpp#L1296-L1300)): a
 subtree shared between two definitions must contribute its projections as
 edges of *both*, and a global set would silently drop the second, leaving the
 graph under-connected and the partition too fine.
@@ -2660,14 +2660,14 @@ RECDEF properties, definitions not being branches. With owners defined that way
 the cascade needs no rule of its own: kill the outer member $j$ and everything
 its definition held, entire inner groups included, goes down with it.
 
-`gcRecGroups` ([recursive-tree.cpp:1519](tlib/recursive-tree.cpp#L1519),
-declared at [tree.hh:593-603](tlib/tree.hh#L593-L603)) performs the collection
+`gcRecGroups` ([recursive-tree.cpp:1530](tlib/recursive-tree.cpp#L1530),
+declared at [tree.hh:603-613](tlib/tree.hh#L603-L613)) performs the collection
 in two phases, and the first is short enough to be a small surprise.
 
 Liveness is computed by `descendFixpoint` (§11) over the **bit** domain, with
 the doors redeclared: here a door leads from a projection node
 $\mathrm{proj}_i(W)$ to the $i$-th definition of $W$
-([recursive-tree.cpp:1521-1542](tlib/recursive-tree.cpp#L1521-L1542)). Two
+([recursive-tree.cpp:1532-1553](tlib/recursive-tree.cpp#L1532-L1553)). Two
 consequences fall out at once. The owner rule needs no implementation, because a
 definition can only be entered through its own projection's door. And the bits
 need not be read: over the bit domain the least fixed point **is** the
@@ -2680,11 +2680,11 @@ The second phase is surgery, and it answers to an invariant this tour has been
 accumulating since §2: **an untouched subtree must come back pointer-identical**.
 So the rebuild first computes the exact **dirty** set — the nodes from which a
 shrinking group is reachable through live containment edges
-([recursive-tree.cpp:1586-1644](tlib/recursive-tree.cpp#L1586-L1644)) — and the
+([recursive-tree.cpp:1597-1655](tlib/recursive-tree.cpp#L1597-L1655)) — and the
 memoised rebuild returns its input for everything outside it
-([recursive-tree.cpp:1650](tlib/recursive-tree.cpp#L1650)). When no group
+([recursive-tree.cpp:1661](tlib/recursive-tree.cpp#L1661)). When no group
 anywhere loses a member, the root itself comes back unchanged
-([recursive-tree.cpp:1583](tlib/recursive-tree.cpp#L1583)).
+([recursive-tree.cpp:1594](tlib/recursive-tree.cpp#L1594)).
 
 A rebuilt group compacts: survivors keep their relative order and are renumbered
 onto $0..m-1$, so each surviving $\mathrm{proj}_j(W)$ becomes
@@ -2694,7 +2694,7 @@ is rebuilt, therefore it is a **new** node with a fresh variable, therefore ever
 reference to it has to be rewritten in any case. And one line of the rebuild is
 this chapter's own trick applied by its author — the fresh SYMREC node is created
 **before** its body exists
-([recursive-tree.cpp:1667](tlib/recursive-tree.cpp#L1667)), because the group is
+([recursive-tree.cpp:1678](tlib/recursive-tree.cpp#L1678)), because the group is
 its own reference and its definitions must have something to point at.
 
 Why a separate primitive, when `normalizeRecGroups` already drops the
@@ -2710,20 +2710,20 @@ orphaned collected, with its groups left alone. `gcRecGroups` is the cleanup
 with no opinion about structure.
 
 The conformance test is `checkGcRecGroups`
-([tests.cpp:1770](tests.cpp#L1770)), and its cases are the definition's corners:
+([tests.cpp:2155](tests.cpp#L2155)), and its cases are the definition's corners:
 a direct removal with renumbering, the cascade, the dead cycle, the *live* cycle
 where a single external reference saves both members, and a nested group living
 inside a member that dies. Two of them also pin the identity claim: the live
 cycle returns its input pointer, and collecting an already-collected term
 returns the same pointer again.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
 **A recursive definition is immutable once given.** Redefining a symbolic
 variable with a different body, or erasing its definition, is fatal
-([tree.hh:449-464](tlib/tree.hh#L449-L464)). Transformations allocate fresh
+([tree.hh:450-465](tlib/tree.hh#L450-L465)). Transformations allocate fresh
 variables instead — which is what `treeRewrite` does, and why its in-place
 variant was removed. One escape hatch exists and is labelled as such:
 `tlib::setMutableRecDefinitions(true)`
@@ -3175,7 +3175,7 @@ by the original while building from rewritten children, and exposes its memo so
 that nested arguments can be matched with their transforms. The full
 specification of both is [REWRITE-SPEC.md](REWRITE-SPEC.md).
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
@@ -3481,10 +3481,10 @@ one bit read — reaches its final value in one pass and is memoised **for
 good**. A value belonging to an already-settled component is likewise
 permanent. Only values that depend on the component being iterated are
 *moving*, and only those are discarded between rounds. The plan itself comes
-from `RecPlan` ([tree.hh:524](tlib/tree.hh#L524)), memoised one per root per
+from `RecPlan` ([tree.hh:525](tlib/tree.hh#L525)), memoised one per root per
 session, so repeated analyses of the same term share one Tarjan run.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
@@ -3970,7 +3970,7 @@ If some cycle avoided the doors, the nodes on it would keep a positive count,
 never become ready, and this line would fail. The argument that the descent
 terminates is not left in a comment; it is checked on every run.
 
-The conformance test is `checkDescend` in [tests.cpp:1604](tests.cpp#L1604),
+The conformance test is `checkDescend` in [tests.cpp:1989](tests.cpp#L1989),
 and its cases are chosen so that each *can* fail. On the shared DAG
 `R(S(x, x), x)` the path count matches the hand-computed truth — `x` is
 reached by three paths, `s` and `r` by one — and a *minimum* join computes
@@ -4055,7 +4055,7 @@ canonicity before it breaks anything else, and this is the one place the
 breakage is visible.
 
 The conformance test is `checkDescendFixpoint`
-([tests.cpp:1669](tests.cpp#L1669)), and its four cases are the four claims of
+([tests.cpp:2054](tests.cpp#L2054)), and its four cases are the four claims of
 this section, in order. A diamond counts paths with a plain sum — the equation a
 join-only engine could not express — and the shared node comes out at exactly 2;
 a counter on `combine` then asserts `evals == 4`, one recomputation per node,
@@ -4068,7 +4068,7 @@ tamed by a finite-height domain. And the same computation run under all three
 strategies must give strictly equal maps — the canonicity theorem as a
 regression test.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
@@ -4245,7 +4245,7 @@ the join, $c_1 ∨ c_2 = c_1$ says $c_2 ⊑ c_1$. So:
 — it holds when the **second** argument is the stronger condition, and the
 header now says so ([dcond.hh:37-39](tlib/dcond.hh#L37-L39)), pointing at the
 assertion that settles it: `dnfLess(a, a ∧ b)`
-([tests.cpp:1221](tests.cpp#L1221)), since $a ∧ b$ implies $a$. The comment
+([tests.cpp:1606](tests.cpp#L1606)), since $a ∧ b$ implies $a$. The comment
 stated the converse for years, and a reader who trusts comments over tests —
 this chapter did, once — reproduces the error rather than finding it.
 
@@ -4261,7 +4261,7 @@ here !!!!"*), `dnfAnd` carries an *"A REVOIR !!!"*
 commutativity and one ordering example rather than an algebraic
 specification.
 
-*Code references verified at `d563fbd`.*
+*Code references verified at `634be62`.*
 
 ## Invariants and non-goals
 
