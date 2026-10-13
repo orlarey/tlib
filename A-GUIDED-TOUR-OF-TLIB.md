@@ -3,10 +3,8 @@ document-style: rapport-a4
 author: The Faust Team
 title: A guided tour of TLIB
 subtitle: The tree library at the heart of the Faust compiler
-date: 2026-09-26
+date: 2026-10-13
 ---
-
-# Introduction
 
 TLIB is the tree library at the heart of the [Faust](https://faust.grame.fr)
 compiler. This document explains what it is made of, in the order in which its
@@ -16,7 +14,6 @@ by theory, and it introduces the small amount of algebra needed to see why the
 library has the shape it has.
 
 ::: toc+
-- **How to read this document** — the six fixed sections, the reading paths, the forward references.
 - **Signatures and algebras** — one traversal, many interpretations: why a fold is the unit of work, and what it demands of everything below.
 - **Hash-consing and maximal sharing** — one object per distinct term, so that structural equality becomes pointer equality.
 - **Nodes and symbols** — what a node may hold, and interning as the base case of the same idea.
@@ -32,10 +29,9 @@ library has the shape it has.
 - **The stack, in one picture** — what TLIB is, and what it deliberately never knows.
 :::
 
-## How to read this document
-
-Each concept is presented in six fixed sections, always in the same order, so
-that a section can be skipped without losing the thread:
+**How to read this document.** Each concept is presented in six fixed
+sections, always in the same order, so that a section can be skipped without
+losing the thread:
 
 | Section | What it gives you |
 | :--- | :--- |
@@ -60,7 +56,8 @@ stops being true breaks a test instead of quietly becoming fiction.
 
 Cross-references are written **§n**, counting the concepts in the order they
 appear: §1 is *Signatures and algebras*, §2 *Hash-consing and maximal sharing*,
-and so on to §13, *The stack, in one picture*. This section is not one of them.
+and so on to §13, *The stack, in one picture*. These opening pages are not one
+of them, which is why they carry no number.
 
 The concepts are ordered by dependency: each one is introduced before the
 sections that rest on it. The order is not a strict layering, though, and it
