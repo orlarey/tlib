@@ -3413,7 +3413,7 @@ function of the previous round alone.
 [fixpoint.hh](tlib/fixpoint.hh) is header-only and organised around two
 interfaces the client implements or receives.
 
-`FixPointDomain<V>` ([fixpoint.hh:66](tlib/fixpoint.hh#L66)) is the lattice.
+`FixPointDomain<V>` ([fixpoint.hh:67](tlib/fixpoint.hh#L67)) is the lattice.
 Its defaults are worth reading as a design statement: they define an **exact**
 domain — converge by equality, never widen, no cap, no narrowing, no probe — so
 a domain with no infinite chains implements four methods (`bottom`, `top`,
@@ -3427,14 +3427,14 @@ State that is genuinely needed is declared `mutable`, which says precisely that
 it is not part of the denotation. That is §5's memoisation invariant, restated
 as a C++ signature.
 
-`FixPointEvaluator<V>` ([fixpoint.hh:56](tlib/fixpoint.hh#L56)) is the handle
+`FixPointEvaluator<V>` ([fixpoint.hh:57](tlib/fixpoint.hh#L57)) is the handle
 the iterator passes *into* `combine`, letting a constructor ask for the value of
 any subtree rather than only receiving its direct branches. The motivation is
 concrete: a Faust slider keeps its four range signals in a nested list, so its
 node has two branches while the operation it denotes takes five arguments.
 Asking costs nothing extra, since values are memoised either way.
 
-The solver itself ([fixpoint.hh:286-311](tlib/fixpoint.hh#L286-L311)) is the
+The solver itself ([fixpoint.hh:353-378](tlib/fixpoint.hh#L353-L378)) is the
 two-phase regime, readable almost as pseudocode:
 
 ```cpp
@@ -3460,17 +3460,19 @@ losing all precision rather than reporting an unsound value. And the narrowing
 phase only runs for domains that widen, since an exact domain has nothing to
 recover.
 
-`jacobiStep` ([fixpoint.hh:402](tlib/fixpoint.hh#L402)) is the frozen-snapshot
+`jacobiStep` ([fixpoint.hh:469](tlib/fixpoint.hh#L469)) is the frozen-snapshot
 round described above; the comment `fCurrentApprox = approx; // frozen : eval
 reads only this during the round` is the whole of the Jacobi discipline.
 
-`probeComponent` ([fixpoint.hh:325](tlib/fixpoint.hh#L325)) implements the
+`probeComponent` ([fixpoint.hh:392](tlib/fixpoint.hh#L392)) implements the
 third regime, with one refinement over the sketch above: a domain supplies an
 *ordered list* of seed candidates, tried until one certifies, so an analysis can
 fall back from a strong certificate to a weaker one — the interval domain tries
 positivity $[0, \mathrm{BIG}]$ first, then the symmetric
 $[-\mathrm{BIG}, \mathrm{BIG}]$ that a contracting signed loop such as a plucked
 string still satisfies. The probe *informs*, it never writes the settled values.
+
+An iterator can also be built **lazy**, by the third argument of its constructor ([fixpoint.hh:153](tlib/fixpoint.hh#L153)). It then solves, at each question, only the components the signal reaches (`require`, [fixpoint.hh:210](tlib/fixpoint.hh#L210)). Reaching a component walks its definitions, so every component it depends on is reached too, and the plan order solves them first. A component depends only on lower ones, so the values are those of the eager iterator, which solves every component at the first question. A lazy iterator also copies the definitions when it is built: a pass may redefine a recursive node while its old signals are still being asked about.
 
 Underpinning all of it is the memo, and its three classes are where §8's
 synthesized bits pay off. A subterm free of recursive nodes — `isRecFree()`,
@@ -3481,7 +3483,7 @@ permanent. Only values that depend on the component being iterated are
 from `RecPlan` ([tree.hh:525](tlib/tree.hh#L525)), memoised one per root per
 session, so repeated analyses of the same term share one Tarjan run.
 
-*Code references verified at `634be62`.*
+*Code references verified at `9c57855`.*
 
 ## Invariants and non-goals
 
