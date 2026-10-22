@@ -44,6 +44,11 @@ add_executable(tlib-tests main.cpp tests.cpp tests.hh)
 target_link_libraries(tlib-tests PRIVATE tlib)
 add_test(NAME tlib-tests COMMAND tlib-tests)
 
+# a property declared at namespace scope, the program linked before the library
+add_executable(tlib-static-init static-init-test.cpp)
+target_link_libraries(tlib-static-init PRIVATE tlib)
+add_test(NAME tlib-static-init COMMAND tlib-static-init)
+
 # the benchmark executable
 add_executable(tlib-benchmark benchmark.cpp)
 target_link_libraries(tlib-benchmark PRIVATE tlib)
