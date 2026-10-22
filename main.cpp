@@ -20,6 +20,7 @@ int main(int, const char**)
     r &= checkSymbols();
     r &= checkArithmeticSignatureFold();
     r &= checkNodes();
+    r &= checkIntegerFolding();
     r &= checkHashConsing();
     r &= checkAccessors();
     r &= checkConversions();

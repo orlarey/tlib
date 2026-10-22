@@ -282,6 +282,30 @@ bool checkArithmeticSignatureFold()
 // Nodes
 //-----------------------------------------------------------------------------
 
+// The folding of integer constants computes as the generated code : the int32 sum, difference
+// and product wrap modulo 2^32, a shift takes its count modulo 32, and no fold is undefined.
+bool checkIntegerFolding()
+{
+    bool      ok = true;
+    const int M  = INT_MAX, m = INT_MIN;
+    CHECK(int(addNode(Node(M), Node(1))) == m);
+    CHECK(int(subNode(Node(m), Node(1))) == M);
+    CHECK(int(mulNode(Node(65536), Node(65536))) == 0);
+    CHECK(int(mulNode(Node(m), Node(-1))) == m);
+    CHECK(int(minusNode(Node(m))) == m);
+    CHECK(int(remNode(Node(m), Node(-1))) == 0);
+    // an exact int quotient beyond int32 is the exact double
+    CHECK(isDouble(divExtendedNode(Node(m), Node(-1))) && double(divExtendedNode(Node(m), Node(-1))) == 2147483648.0);
+    CHECK(int(divExtendedNode(Node(7), Node(2))) == 0 || double(divExtendedNode(Node(7), Node(2))) == 3.5);
+    CHECK(int(lshNode(Node(1), Node(40))) == 256);
+    CHECK(int(lshNode(Node(-1), Node(31))) == m);
+    CHECK(int(lshNode(Node(1), Node(-1))) == m);
+    CHECK(int(arshNode(Node(-8), Node(1))) == -4);
+    CHECK(int(lrshNode(Node(-8), Node(1))) == 2147483644);
+    CHECK(int(lrshNode(Node(-8), Node(33))) == 2147483644);
+    return ok;
+}
+
 bool checkNodes()
 {
     bool ok = true;

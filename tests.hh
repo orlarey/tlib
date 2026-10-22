@@ -9,6 +9,7 @@
 bool checkSymbols();
 bool checkArithmeticSignatureFold();
 bool checkNodes();
+bool checkIntegerFolding();
 bool checkHashConsing();
 bool checkAccessors();
 bool checkConversions();
