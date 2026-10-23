@@ -745,6 +745,23 @@ bool checkRecursiveTrees()
 // Bottom-up rewriting (treeRewrite, see REWRITE-SPEC.md)
 //-----------------------------------------------------------------------------
 
+// sym2deBruijn is compositional : the conversion of a member of a mutual component does not
+// depend on the members converted before it (h(X, Y) with X = f(Y), Y = g(X))
+bool checkSym2deBruijnCompositional()
+{
+    bool ok = true;
+    Tree x  = tree(unique("X"));
+    Tree y  = tree(unique("Y"));
+    Tree rx = rec(x, tree(symbol("f"), ref(y)));
+    Tree ry = rec(y, tree(symbol("g"), ref(x)));
+    Tree t  = tree(symbol("h"), rx, ry);
+    Tree d  = sym2deBruijn(t);
+    CHECK(d->branch(0) == sym2deBruijn(rx));
+    CHECK(d->branch(1) == sym2deBruijn(ry));
+    CHECK(sym2deBruijn(deBruijn2Sym(d)) == d);
+    return ok;
+}
+
 bool checkMutualRecursion()
 {
     bool ok = true;

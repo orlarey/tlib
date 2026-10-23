@@ -20,6 +20,7 @@ bool checkSets();
 bool checkEnvironments();
 bool checkRecursiveTrees();
 bool checkMutualRecursion();
+bool checkSym2deBruijnCompositional();
 bool checkNormalizeRecGroups();
 bool checkRecImmutability();
 bool checkFixPoint();

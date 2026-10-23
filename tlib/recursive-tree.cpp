@@ -796,10 +796,16 @@ static Tree sym2deBruijnAux(Tree t, Tree env, Sym2DebState& state)
         return t;
     }
 
-    // A closed result does not depend on the environment
-    auto cIt = state.closedMemo.find(t);
-    if (cIt != state.closedMemo.end()) {
-        return cIt->second;
+    // A closed result does not depend on the environment, except the standalone conversion
+    // of a member of the component being converted : there the member is inlined against
+    // the environment (its binder, or a reference to it), whichever members were
+    // converted before it
+    Tree member;
+    if (!(isSymbolicRef(t, member) && state.currentSCC >= 0 && state.plan.sccOf(t) == state.currentSCC)) {
+        auto cIt = state.closedMemo.find(t);
+        if (cIt != state.closedMemo.end()) {
+            return cIt->second;
+        }
     }
 
     const std::pair<Tree, Tree> key(t, env);
