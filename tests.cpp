@@ -2245,6 +2245,32 @@ bool checkGcRecGroups()
         }
     }
 
+    // a group referenced bare is whole, and its definitions are read : G = [m(proj(0, V))],
+    // V = [v0, v1], root h(G, proj(1, V)) ; and a group that is the body of a single-equation
+    // recursion is whole : S := G, G = [a1, a2], root h(S)
+    {
+        Tree v = tree(unique("V"));
+        Tree g = tree(unique("G"));
+        rec(v, cons(tree(symbol("v0")), cons(tree(symbol("v1")), nil())));
+        rec(g, cons(tree(symbol("m"), proj(0, ref(v))), nil()));
+        Tree root1 = tree(symbol("h"), ref(g), proj(1, ref(v)));
+        Tree g2    = tree(unique("G"));
+        Tree s     = tree(unique("S"));
+        rec(g2, cons(tree(symbol("a1")), cons(tree(symbol("a2")), nil())));
+        rec(s, ref(g2));
+        Tree root2 = tree(symbol("h"), ref(s));
+        for (Tree root : {root1, root2}) {
+            bool threw = false;
+            Tree r     = nullptr;
+            try {
+                r = gcRecGroups(root);
+            } catch (std::runtime_error&) {
+                threw = true;
+            }
+            CHECK(!threw && r == root);
+        }
+    }
+
     // a member read only from the body of a single-equation recursion is live, and the
     // renumbering reaches that body : V = (d0, d1, d2), d1 dead, S = g(proj(2, V), S)
     {

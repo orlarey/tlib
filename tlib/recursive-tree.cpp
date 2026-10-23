@@ -1598,8 +1598,56 @@ static Tree nthDef(Tree body, int i)
 
 Tree gcRecGroups(Tree root)
 {
+    // ---- the groups used whole : referenced bare (the root, a branch of anything but
+    // proj(i, G), the body of a single-equation recursion), so every member stays. Found over
+    // every definition of every group, a conservative superset : a bare reference in a dead
+    // definition only keeps more.
+    std::map<Tree, bool, treeorder> whole;
+    {
+        auto listGroup = [](Tree c) {
+            Tree id, body;
+            return isRec(c, id, body) && body != nullptr && isList(body);
+        };
+        std::vector<Tree>        work{root};
+        std::unordered_set<Tree> seen{root};
+        auto                     visit = [&](Tree c) {
+            if (seen.insert(c).second) {
+                work.push_back(c);
+            }
+        };
+        if (listGroup(root)) {
+            whole[root] = true;
+        }
+        while (!work.empty()) {
+            Tree n = work.back();
+            work.pop_back();
+            int  i;
+            Tree g, id, body;
+            const bool projection = isProj(n, i, g);
+            for (int k = 0; k < n->arity(); k++) {
+                Tree c = n->branch(k);
+                if (listGroup(c) && !(projection && c == g)) {
+                    whole[c] = true;
+                }
+                visit(c);
+            }
+            if (isRec(n, id, body) && body != nullptr) {
+                if (isList(body)) {
+                    for (Tree l = body; isList(l); l = tl(l)) {
+                        visit(hd(l));
+                    }
+                } else {
+                    if (listGroup(body)) {
+                        whole[body] = true;
+                    }
+                    visit(body);
+                }
+            }
+        }
+    }
+
     // ---- phase 1 : liveness = the discovered set of the bit descent with
-    // projection doors
+    // projection doors ; a group used whole opens all its definitions
     auto live = descendFixpoint<char>(
         root, 0, 1,
         [](Tree, int, const char& a) { return a; },
@@ -1610,7 +1658,7 @@ Tree gcRecGroups(Tree root)
             }
             return r;
         },
-        [](Tree n, std::vector<Tree>& out) {
+        [&whole](Tree n, std::vector<Tree>& out) {
             int  i;
             Tree g, id, body;
             if (isProj(n, i, g) && isRec(g, id, body)) {
@@ -1618,31 +1666,17 @@ Tree gcRecGroups(Tree root)
                 if (isList(body)) {
                     out.push_back(nthDef(body, i));
                 }
-            } else if (isRec(n, id, body) && body != nullptr && !isList(body)) {
-                // a single-equation recursion rec(x, expr) : its body is read with it
-                out.push_back(body);
+            } else if (isRec(n, id, body) && body != nullptr) {
+                if (!isList(body)) {
+                    // a single-equation recursion rec(x, expr) : its body is read with it
+                    out.push_back(body);
+                } else if (whole.count(n) > 0) {
+                    for (Tree l = body; isList(l); l = tl(l)) {
+                        out.push_back(hd(l));
+                    }
+                }
             }
         });
-
-    // the groups referenced bare, not through a projection : used whole, every member
-    // stays (a group reached as the root, or as a branch of anything but proj(i, group))
-    std::map<Tree, bool, treeorder> whole;
-    {
-        auto bare = [&](Tree c, Tree parent) {
-            Tree id, body, g;
-            int  i;
-            if (isRec(c, id, body) && body != nullptr && isList(body) &&
-                !(parent != nullptr && isProj(parent, i, g) && g == c)) {
-                whole[c] = true;
-            }
-        };
-        bare(root, nullptr);
-        for (const auto& [t, bit] : live) {
-            for (int k = 0; k < t->arity(); k++) {
-                bare(t->branch(k), t);
-            }
-        }
-    }
 
     // ---- the per-group verdict : live member indices, by probing the
     // hash-consed projection nodes against the discovered set
