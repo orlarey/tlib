@@ -358,7 +358,7 @@ TLIB_API int tree2int(Tree t)
     if (isInt(t->node(), &i)) {
         // nothing to do
     } else if (isDouble(t->node(), &x)) {
-        i = int(x);
+        i = saturatedInt(x);
     } else {
         ERROR("ERROR : the parameter must be an integer constant numerical expression : ", t);
     }

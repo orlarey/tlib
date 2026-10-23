@@ -310,6 +310,18 @@ bool checkNodes()
 {
     bool ok = true;
 
+    // a real out of the int32 range converts as Faust's int() : saturated (a plain conversion
+    // is undefined behaviour), a NaN giving 0 ; INT_MIN / -1 is the real 2147483648
+    {
+        volatile double big = 2147483648.0, low = -1e300, nan = std::nan("");
+        CHECK(int(Node(double(big))) == INT_MAX);
+        CHECK(int(Node(double(low))) == INT_MIN);
+        CHECK(int(Node(double(nan))) == 0);
+        CHECK(tree2int(tree(double(big))) == INT_MAX);
+        volatile int m = INT_MIN, n = -1;
+        CHECK(int(lshNode(divExtendedNode(Node(int(m)), Node(int(n))), Node(1))) == -2);
+    }
+
     int    i = 0;
     double d = 0;
     Sym    s = nullptr;
