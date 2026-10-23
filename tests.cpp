@@ -2217,6 +2217,42 @@ bool checkGcRecGroups()
 {
     bool ok = true;
 
+    // a group referenced bare, not through a projection, is used whole : kept intact
+    {
+        Tree x = tree(unique("W"));
+        Tree w = ref(x);
+        rec(x, cons(tree(symbol("a1")), cons(tree(symbol("a2")), nil())));
+        for (Tree root : {tree(symbol("k"), w), tree(symbol("k2"), w, proj(0, w))}) {
+            bool threw = false;
+            Tree g     = nullptr;
+            try {
+                g = gcRecGroups(root);
+            } catch (std::runtime_error&) {
+                threw = true;
+            }
+            CHECK(!threw && g == root);
+        }
+    }
+
+    // a member read only from the body of a single-equation recursion is live, and the
+    // renumbering reaches that body : V = (d0, d1, d2), d1 dead, S = g(proj(2, V), S)
+    {
+        Tree vx = tree(unique("V"));
+        Tree v  = ref(vx);
+        rec(vx, cons(tree(symbol("d0")), cons(tree(symbol("d1")), cons(tree(symbol("d2")), nil()))));
+        Tree sx = tree(unique("S"));
+        Tree s  = ref(sx);
+        rec(sx, tree(symbol("g"), proj(2, v), s));
+        Tree root = tree(symbol("h"), proj(0, v), s);
+        Tree g    = gcRecGroups(root);
+        int  i0 = -1, i1 = -1;
+        Tree v0 = nullptr, v1 = nullptr, sv = nullptr, sb = nullptr;
+        CHECK(isProj(g->branch(0), i0, v0) && i0 == 0 && groupSize(v0) == 2);
+        CHECK(isRec(g->branch(1), sv, sb) && sb != nullptr && !isList(sb));
+        CHECK(sb != nullptr && isProj(sb->branch(0), i1, v1) && v1 == v0 && i1 == 1);
+        CHECK(sb != nullptr && sb->branch(1) == g->branch(1));  // S still refers to itself
+    }
+
     // 1) direct : W = (d, r, s), r never referenced -> (d, s), renumbered
     {
         Tree x = tree(unique("W"));

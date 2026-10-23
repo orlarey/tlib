@@ -1582,8 +1582,31 @@ Tree gcRecGroups(Tree root)
                 if (isList(body)) {
                     out.push_back(nthDef(body, i));
                 }
+            } else if (isRec(n, id, body) && body != nullptr && !isList(body)) {
+                // a single-equation recursion rec(x, expr) : its body is read with it
+                out.push_back(body);
             }
         });
+
+    // the groups referenced bare, not through a projection : used whole, every member
+    // stays (a group reached as the root, or as a branch of anything but proj(i, group))
+    std::map<Tree, bool, treeorder> whole;
+    {
+        auto bare = [&](Tree c, Tree parent) {
+            Tree id, body, g;
+            int  i;
+            if (isRec(c, id, body) && body != nullptr && isList(body) &&
+                !(parent != nullptr && isProj(parent, i, g) && g == c)) {
+                whole[c] = true;
+            }
+        };
+        bare(root, nullptr);
+        for (const auto& [t, bit] : live) {
+            for (int k = 0; k < t->arity(); k++) {
+                bare(t->branch(k), t);
+            }
+        }
+    }
 
     // ---- the per-group verdict : live member indices, by probing the
     // hash-consed projection nodes against the discovered set
@@ -1600,7 +1623,7 @@ Tree gcRecGroups(Tree root)
         // (the single-equation recursion rec(x, expr) of the guide) : it has
         // no members and no projections, the GC does not apply BY DOMAIN.
         TLIB_ASSERT(body != nullptr);
-        if (!isList(body)) {
+        if (!isList(body) || whole.count(t) > 0) {
             continue;
         }
         int n = 0;
@@ -1661,6 +1684,8 @@ Tree gcRecGroups(Tree root)
                         visit(hd(l));
                     }
                 }
+            } else if (isRec(n, id, body) && body != nullptr && live.count(n) > 0) {
+                visit(body);  // the body of a single-equation recursion
             }
         }
     }
@@ -1730,6 +1755,13 @@ Tree gcRecGroups(Tree root)
                 nb = cons(*d, nb);
             }
             return rec(id2, nb);
+        }
+        if (isRec(t, id, body) && body != nullptr) {
+            // a single-equation recursion whose body changes : a fresh node, first, as above
+            Tree id2 = tree(unique("W"));
+            Tree w2  = ref(id2);
+            memo[t]  = w2;
+            return rec(id2, build(body));
         }
         int  ar = t->arity();
         Tree r  = t;
