@@ -5,6 +5,8 @@
  */
 
 #include <climits>
+#include <cstdint>
+#include <random>
 #include <cstring>
 #include <iostream>
 #include <optional>
@@ -1668,6 +1670,63 @@ bool checkMinimalRewrite()
         CHECK(!sawCell);
     }
 
+    return ok;
+}
+
+// The DNF and CNF operations against truth tables : random formulas over 4 atoms, each
+// result compared with the exact truth table over the 16 assignments. DNF : an OR of ANDs ;
+// CNF : an AND of ORs ; nil is true in both. Also : a DNF holding the empty conjunction is
+// true, as nil.
+static uint16_t dcondTruth(Tree c, Tree atoms[4], bool dnf)
+{
+    if (isNil(c)) return 0xFFFF;
+    uint16_t t = dnf ? 0 : 0xFFFF;
+    for (Tree l = c; isList(l); l = tl(l)) {
+        uint16_t clause = dnf ? 0xFFFF : 0;
+        for (Tree k = hd(l); isList(k); k = tl(k)) {
+            for (int a = 0; a < 4; a++) {
+                if (hd(k) == atoms[a]) {
+                    uint16_t m = 0;
+                    for (int r = 0; r < 16; r++) {
+                        if ((r >> a) & 1) m |= uint16_t(1u << r);
+                    }
+                    clause = dnf ? uint16_t(clause & m) : uint16_t(clause | m);
+                }
+            }
+        }
+        t = dnf ? uint16_t(t | clause) : uint16_t(t & clause);
+    }
+    return t;
+}
+
+bool checkDcondTruthTables()
+{
+    bool        ok      = true;
+    const char* names[] = {"tt_a", "tt_b", "tt_c", "tt_d"};
+    Tree        atoms[4];
+    for (int a = 0; a < 4; a++) atoms[a] = tree(symbol(names[a]));
+    for (bool dnf : {true, false}) {
+        std::mt19937      rng(12345);
+        std::vector<Tree> pool = {nil()};
+        for (int a = 0; a < 4; a++) pool.push_back(dnf ? dnfCond(atoms[a]) : cnfCond(atoms[a]));
+        long wrong = 0;
+        for (int it = 0; it < 20000; it++) {
+            Tree     x = pool[rng() % pool.size()], y = pool[rng() % pool.size()];
+            Tree     ra = dnf ? dnfAnd(x, y) : cnfAnd(x, y);
+            Tree     ro = dnf ? dnfOr(x, y) : cnfOr(x, y);
+            uint16_t tx = dcondTruth(x, atoms, dnf), ty = dcondTruth(y, atoms, dnf);
+            if (dcondTruth(ra, atoms, dnf) != (tx & ty)) wrong++;
+            if (dcondTruth(ro, atoms, dnf) != (tx | ty)) wrong++;
+            const bool implies = (ty & ~tx & 0xFFFF) == 0;  // y implies x : x is less specific
+            if ((dnf ? dnfLess(x, y) : cnfLess(x, y)) != implies) wrong++;
+            for (Tree r : {ra, ro}) {
+                if (pool.size() < 400) pool.push_back(r);
+            }
+        }
+        CHECK(wrong == 0);
+    }
+    Tree truth = cons(nil(), nil());  // {{}}
+    CHECK(dnfLess(truth, nil()) && dnfLess(nil(), truth));
     return ok;
 }
 

@@ -42,6 +42,7 @@ int main(int, const char**)
     r &= checkGuardedRewrite();
     r &= checkMinimalRewrite();
     r &= checkDnfCnf();
+    r &= checkDcondTruthTables();
     r &= checkDescend();
     r &= checkDescendFixpoint();
     r &= checkGcRecGroups();

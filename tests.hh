@@ -30,6 +30,7 @@ bool checkRewrite();
 bool checkGuardedRewrite();
 bool checkMinimalRewrite();
 bool checkDnfCnf();
+bool checkDcondTruthTables();
 bool checkErrorHandler();
 bool checkLifecycle();
 bool checkHashTableGrowth();
