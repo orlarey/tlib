@@ -779,6 +779,17 @@ bool checkSym2deBruijnCompositional()
     CHECK(d->branch(0) == sym2deBruijn(rx));
     CHECK(d->branch(1) == sym2deBruijn(ry));
     CHECK(sym2deBruijn(deBruijn2Sym(d)) == d);
+
+    // a term shared by the root and a member, that reaches a member of the component :
+    // X = f(Y), Y = g(s), s = k(X) ; h(s, Y) converts Y as Y alone
+    Tree x2 = tree(unique("X"));
+    Tree y2 = tree(unique("Y"));
+    Tree s2 = tree(symbol("k"), ref(x2));
+    rec(x2, tree(symbol("f"), ref(y2)));
+    rec(y2, tree(symbol("g"), s2));
+    Tree d2 = sym2deBruijn(tree(symbol("h"), s2, ref(y2)));
+    CHECK(d2->branch(1) == sym2deBruijn(ref(y2)));
+    CHECK(sym2deBruijn(deBruijn2Sym(d2)) == d2);
     return ok;
 }
 

@@ -620,6 +620,13 @@ struct Sym2DebState {
     std::unordered_map<Tree, Tree> closedMemo;       ///< closed results, keyed by term
     Sym2DebMemo                    envMemo;          ///< open results, keyed by (term, env)
     int                            currentSCC = -1;  ///< component being converted
+    struct ReachKeyHash {
+        std::size_t operator()(const std::pair<Tree, int>& k) const
+        {
+            return std::hash<Tree>()(k.first) ^ (std::size_t(k.second) * 0x9e3779b97f4a7c15ULL);
+        }
+    };
+    std::unordered_map<std::pair<Tree, int>, bool, ReachKeyHash> reaches;  ///< whether a term reaches a component
 
     explicit Sym2DebState(const RecPlan& p) : plan(p) {}
 };
@@ -793,6 +800,32 @@ static Tree sym2deBruijnAux(Tree t, Tree env, Sym2DebState& state);
 
 // Convert a recursive node of another (lower) component, standalone: the
 // result is closed and ends up in the closed memo.
+// Whether t reaches a member of the component scc : a symbolic reference of that component
+// below t. The members of another component are not entered : one that reached scc would be in
+// it.
+static bool reachesComponent(Tree t, int scc, Sym2DebState& state)
+{
+    if (isSym2deBruijnInvariant(t)) {
+        return false;
+    }
+    const std::pair<Tree, int> key(t, scc);
+    auto                       it = state.reaches.find(key);
+    if (it != state.reaches.end()) {
+        return it->second;
+    }
+    bool r = false;
+    Tree var;
+    if (isSymbolicRef(t, var)) {
+        r = state.plan.sccOf(t) == scc;
+    } else {
+        for (int i = 0; i < t->arity() && !r; i++) {
+            r = reachesComponent(t->branch(i), scc, state);
+        }
+    }
+    state.reaches[key] = r;
+    return r;
+}
+
 static Tree sym2deBruijnRec(Tree recNode, Sym2DebState& state)
 {
     auto it = state.closedMemo.find(recNode);
@@ -813,6 +846,8 @@ static Tree sym2deBruijnRec(Tree recNode, Sym2DebState& state)
     if (!isClosed(result)) {
         tlib::error("ASSERT : component conversion is not closed in sym2deBruijn\n");
     }
+    // the standalone conversion of recNode, what it is outside its component
+    state.closedMemo[recNode] = result;
     return result;
 }
 
@@ -823,12 +858,13 @@ static Tree sym2deBruijnAux(Tree t, Tree env, Sym2DebState& state)
         return t;
     }
 
-    // A closed result does not depend on the environment, except the standalone conversion
-    // of a member of the component being converted : there the member is inlined against
-    // the environment (its binder, or a reference to it), whichever members were
-    // converted before it
-    Tree member;
-    if (!(isSymbolicRef(t, member) && state.currentSCC >= 0 && state.plan.sccOf(t) == state.currentSCC)) {
+    // A closed result does not depend on the environment, except for a term that reaches a
+    // member of the component being converted : there the member is inlined against the
+    // environment (its binder, or a reference to it), and the closed result of the same term
+    // converted elsewhere (where the member was inlined alone) is not its conversion here.
+    // Such a term neither reads nor writes the memo of closed results.
+    const bool inComponent = state.currentSCC >= 0 && reachesComponent(t, state.currentSCC, state);
+    if (!inComponent) {
         auto cIt = state.closedMemo.find(t);
         if (cIt != state.closedMemo.end()) {
             return cIt->second;
@@ -870,7 +906,7 @@ static Tree sym2deBruijnAux(Tree t, Tree env, Sym2DebState& state)
         result = tree(t->node(), br);
     }
 
-    if (isClosed(result)) {
+    if (isClosed(result) && !inComponent) {
         state.closedMemo[t] = result;
     } else {
         state.envMemo[key] = result;
