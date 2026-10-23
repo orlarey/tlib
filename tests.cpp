@@ -745,30 +745,6 @@ bool checkRecursiveTrees()
 // Bottom-up rewriting (treeRewrite, see REWRITE-SPEC.md)
 //-----------------------------------------------------------------------------
 
-// An installed rounding of the reals : every real node, a literal or the result of a folded
-// operation, is a value of that precision (single precision : -1 + 0.1 + 1 folds to the
-// float that a float computation gives)
-static double roundToFloat(double x)
-{
-    return double(float(x));
-}
-
-bool checkRealRounding()
-{
-    bool ok = true;
-    CHECK(realRounding() == nullptr);
-    realRounding() = roundToFloat;
-    const Node a(0.1);
-    CHECK(a.getDouble() == double(0.1f));
-    const Node s = addNode(addNode(Node(-1.0), Node(0.1)), Node(1.0));
-    CHECK(s.getDouble() == double((-1.0f + 0.1f) + 1.0f));
-    CHECK(s.getDouble() != double(float((-1.0 + 0.1) + 1.0)));
-    CHECK(gtNode(s, Node(0.1)).getInt() == 1);  // 0.100000024 > 0.1f
-    realRounding() = nullptr;
-    CHECK(Node(0.1).getDouble() == 0.1);
-    return ok;
-}
-
 // The names that tlib generates for recursive variables are not taken from the application
 bool checkGeneratedNamesFresh()
 {

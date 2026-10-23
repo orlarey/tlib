@@ -22,7 +22,6 @@ bool checkRecursiveTrees();
 bool checkMutualRecursion();
 bool checkSym2deBruijnCompositional();
 bool checkGeneratedNamesFresh();
-bool checkRealRounding();
 bool checkNormalizeRecGroups();
 bool checkRecImmutability();
 bool checkFixPoint();

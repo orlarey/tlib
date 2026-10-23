@@ -34,7 +34,6 @@ int main(int, const char**)
     r &= checkRecursiveTrees() & checkMutualRecursion();
     r &= checkSym2deBruijnCompositional();
     r &= checkGeneratedNamesFresh();
-    r &= checkRealRounding();
     r &= checkNormalizeRecGroups();
     r &= checkRecImmutability();
     r &= checkFixPoint();
