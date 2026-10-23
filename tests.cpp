@@ -745,6 +745,26 @@ bool checkRecursiveTrees()
 // Bottom-up rewriting (treeRewrite, see REWRITE-SPEC.md)
 //-----------------------------------------------------------------------------
 
+// The names that tlib generates for recursive variables are not taken from the application
+bool checkGeneratedNamesFresh()
+{
+    bool ok = true;
+    // deBruijn2Sym names the variable of a recursion D<serial of the term>
+    Tree dbj = rec(tree(symbol("fresh_f"), ref(1)));
+    (void)tree(symbol("D" + std::to_string(dbj->serial())));  // the application made it first
+    bool caught = false;
+    try {
+        deBruijn2Sym(dbj);
+    } catch (std::runtime_error& e) {
+        caught = std::string(e.what()).find("already used") != std::string::npos;
+    }
+    CHECK(caught);
+    // a name that tlib made is its own : converting again gives the same variable
+    Tree dbj2 = rec(tree(symbol("fresh_g"), ref(1)));
+    CHECK(deBruijn2Sym(dbj2) == deBruijn2Sym(dbj2));
+    return ok;
+}
+
 // sym2deBruijn is compositional : the conversion of a member of a mutual component does not
 // depend on the members converted before it (h(X, Y) with X = f(Y), Y = g(X))
 bool checkSym2deBruijnCompositional()

@@ -52,6 +52,7 @@ static Sym  gSubstituteSym   = nullptr;
 static Sym  gSymLiftnSym     = nullptr;
 static Tree gRecDefKey       = nullptr;
 static Tree gDeBruijn2SymKey = nullptr;
+static Tree gGeneratedVarKey = nullptr;
 
 static inline void initRecSymbols()
 {
@@ -69,6 +70,14 @@ static inline Tree recdefKey()
         gRecDefKey = tree(symbol("RECDEF"));
     }
     return gRecDefKey;
+}
+
+static inline Tree generatedVarKey()
+{
+    if (gGeneratedVarKey == nullptr) {
+        gGeneratedVarKey = tree(symbol("GENERATEDVAR"));
+    }
+    return gGeneratedVarKey;
 }
 
 static inline Tree debruijn2symKey()
@@ -101,6 +110,7 @@ void tlibResetRecInternals()
     gSymLiftnSym     = nullptr;
     gRecDefKey       = nullptr;
     gDeBruijn2SymKey = nullptr;
+    gGeneratedVarKey = nullptr;
     initRecSymbols();
 }
 
@@ -473,6 +483,23 @@ static Tree deBruijn2SymCachedReady(Tree t)
  * serial is a creation order : the same on every build, the constructors being
  * sequenced (see the compiler-of-the-compiler chapter).
  */
+// A recursive variable that tlib names itself (D<serial>, R<i>_<k>) : its tree is marked
+// when the name is first made. A name that the application made first is not taken over :
+// a definition would collide with the application's, a free reference to it would be
+// captured in silence.
+static Tree generatedVar(const std::string& name)
+{
+    const bool fresh = !symbolExists(name);
+    Tree       var   = tree(symbol(name));
+    if (fresh) {
+        var->setProperty(generatedVarKey(), var);
+    } else if (var->getProperty(generatedVarKey()) == nullptr) {
+        tlib::error("ERROR : the recursive variable name " + name +
+                    " that tlib generates is already used by the application\n");
+    }
+    return var;
+}
+
 static Tree contentVar(Tree dbj)
 {
     char buf[24];
@@ -480,7 +507,7 @@ static Tree contentVar(Tree dbj)
     if (getenv("TLIB_DBJ_NAME_TRACE")) {
         fprintf(stderr, "DBJ-NAME %s\n", buf);
     }
-    return tree(symbol(buf));
+    return generatedVar(buf);
 }
 
 static Tree deBruijn2SymMemo(Tree t, std::unordered_map<Tree, Tree>& memo)
@@ -1019,7 +1046,7 @@ Tree canonicalizeRecNames(Tree root)
     int                            k = 0;
     for (const auto& comp : plan.components()) {
         for (Tree r : comp) {
-            newVar[r] = tree(symbol(prefix + std::to_string(k++)));
+            newVar[r] = generatedVar(prefix + std::to_string(k++));
         }
     }
 
