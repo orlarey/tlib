@@ -286,25 +286,35 @@ bool checkArithmeticSignatureFold()
 
 // The folding of integer constants computes as the generated code : the int32 sum, difference
 // and product wrap modulo 2^32, a shift takes its count modulo 32, and no fold is undefined.
+// An int known only at run time. With constant operands, the C++ compiler may fold an
+// undefined operation of the old code onto the expected value. Even computed at run time, a
+// wrapping operation gives the expected value on most hardware : these checks are conclusive
+// under UBSan (the sanitizers job of the CI), where undefined behaviour is fatal.
+static Node rt(int x)
+{
+    volatile int v = x;
+    return Node(int(v));
+}
+
 bool checkIntegerFolding()
 {
     bool      ok = true;
     const int M  = INT_MAX, m = INT_MIN;
-    CHECK(int(addNode(Node(M), Node(1))) == m);
-    CHECK(int(subNode(Node(m), Node(1))) == M);
-    CHECK(int(mulNode(Node(65536), Node(65536))) == 0);
-    CHECK(int(mulNode(Node(m), Node(-1))) == m);
-    CHECK(int(minusNode(Node(m))) == m);
-    CHECK(int(remNode(Node(m), Node(-1))) == 0);
+    CHECK(int(addNode(rt(M), rt(1))) == m);
+    CHECK(int(subNode(rt(m), rt(1))) == M);
+    CHECK(int(mulNode(rt(65536), rt(65536))) == 0);
+    CHECK(int(mulNode(rt(m), rt(-1))) == m);
+    CHECK(int(minusNode(rt(m))) == m);
+    CHECK(int(remNode(rt(m), rt(-1))) == 0);
     // an exact int quotient beyond int32 is the exact double
-    CHECK(isDouble(divExtendedNode(Node(m), Node(-1))) && double(divExtendedNode(Node(m), Node(-1))) == 2147483648.0);
-    CHECK(isDouble(divExtendedNode(Node(7), Node(2))) && double(divExtendedNode(Node(7), Node(2))) == 3.5);
-    CHECK(int(lshNode(Node(1), Node(40))) == 256);
-    CHECK(int(lshNode(Node(-1), Node(31))) == m);
-    CHECK(int(lshNode(Node(1), Node(-1))) == m);
-    CHECK(int(arshNode(Node(-8), Node(1))) == -4);
-    CHECK(int(lrshNode(Node(-8), Node(1))) == 2147483644);
-    CHECK(int(lrshNode(Node(-8), Node(33))) == 2147483644);
+    CHECK(isDouble(divExtendedNode(rt(m), rt(-1))) && double(divExtendedNode(rt(m), rt(-1))) == 2147483648.0);
+    CHECK(isDouble(divExtendedNode(rt(7), rt(2))) && double(divExtendedNode(rt(7), rt(2))) == 3.5);
+    CHECK(int(lshNode(rt(1), rt(40))) == 256);
+    CHECK(int(lshNode(rt(-1), rt(31))) == m);
+    CHECK(int(lshNode(rt(1), rt(-1))) == m);
+    CHECK(int(arshNode(rt(-8), rt(1))) == -4);
+    CHECK(int(lrshNode(rt(-8), rt(1))) == 2147483644);
+    CHECK(int(lrshNode(rt(-8), rt(33))) == 2147483644);
     return ok;
 }
 
@@ -1696,7 +1706,8 @@ bool checkMinimalRewrite()
 }
 
 // The DNF and CNF operations against truth tables : random formulas over 4 atoms, each
-// result compared with the exact truth table over the 16 assignments. DNF : an OR of ANDs ;
+// result compared with the exact truth table over the 16 assignments, and checked to be an
+// antichain, the canonical form of a monotone formula. DNF : an OR of ANDs ;
 // CNF : an AND of ORs ; nil is true in both. Also : a DNF holding the empty conjunction is
 // true, as nil.
 static uint16_t dcondTruth(Tree c, Tree atoms[4], bool dnf)
@@ -1731,7 +1742,7 @@ bool checkDcondTruthTables()
         std::mt19937      rng(12345);
         std::vector<Tree> pool = {nil()};
         for (int a = 0; a < 4; a++) pool.push_back(dnf ? dnfCond(atoms[a]) : cnfCond(atoms[a]));
-        long wrong = 0;
+        long wrong = 0, nonCanonical = 0;
         for (int it = 0; it < 20000; it++) {
             Tree     x = pool[rng() % pool.size()], y = pool[rng() % pool.size()];
             Tree     ra = dnf ? dnfAnd(x, y) : cnfAnd(x, y);
@@ -1742,10 +1753,17 @@ bool checkDcondTruthTables()
             const bool implies = (ty & ~tx & 0xFFFF) == 0;  // y implies x : x is less specific
             if ((dnf ? dnfLess(x, y) : cnfLess(x, y)) != implies) wrong++;
             for (Tree r : {ra, ro}) {
+                // canonical : no clause contains another
+                for (Tree l1 = r; isList(l1); l1 = tl(l1)) {
+                    for (Tree l2 = r; isList(l2); l2 = tl(l2)) {
+                        if (hd(l1) != hd(l2) && setUnion(hd(l1), hd(l2)) == hd(l2)) nonCanonical++;
+                    }
+                }
                 if (pool.size() < 400) pool.push_back(r);
             }
         }
         CHECK(wrong == 0);
+        CHECK(nonCanonical == 0);
     }
     Tree truth = cons(nil(), nil());  // {{}}
     CHECK(dnfLess(truth, nil()) && dnfLess(nil(), truth));
