@@ -107,6 +107,7 @@ double       CTree::gHashLoadFactor  = 0.7;
 bool         CTree::gDetails        = false;
 unsigned int CTree::gVisitTime      = 0;
 size_t       CTree::gSerialCounter  = 0;
+size_t       CTree::gSession        = 0;
 
 
 // Smallest prime >= n (trial division; only called on the rare rehash path)
@@ -337,6 +338,7 @@ void CTree::control()
 
 void CTree::init()
 {
+    ++gSession;
     gSerialCounter  = 0;
     gVisitTime      = 0;
     gDetails        = false;
