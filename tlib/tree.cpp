@@ -292,6 +292,18 @@ Tree CTree::make(const Node& n, int ar, const Tree tbl[])
     }
 }
 
+Tree CTree::find(const Node& n, int ar, const Tree br[])
+{
+    if (gHashTable == nullptr) {
+        return nullptr;
+    }
+    Tree t = gHashTable[calcTreeHash(n, ar, br) % gHashTableSize];
+    while (t && !t->equiv(n, ar, br)) {
+        t = t->fNext;
+    }
+    return t;
+}
+
 Tree CTree::make(const Node& n, const tvec& br)
 {
     return CTree::make(n, int(br.size()), br.empty() ? nullptr : br.data());
