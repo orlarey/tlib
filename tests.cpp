@@ -296,7 +296,7 @@ bool checkIntegerFolding()
     CHECK(int(remNode(Node(m), Node(-1))) == 0);
     // an exact int quotient beyond int32 is the exact double
     CHECK(isDouble(divExtendedNode(Node(m), Node(-1))) && double(divExtendedNode(Node(m), Node(-1))) == 2147483648.0);
-    CHECK(int(divExtendedNode(Node(7), Node(2))) == 0 || double(divExtendedNode(Node(7), Node(2))) == 3.5);
+    CHECK(isDouble(divExtendedNode(Node(7), Node(2))) && double(divExtendedNode(Node(7), Node(2))) == 3.5);
     CHECK(int(lshNode(Node(1), Node(40))) == 256);
     CHECK(int(lshNode(Node(-1), Node(31))) == m);
     CHECK(int(lshNode(Node(1), Node(-1))) == m);

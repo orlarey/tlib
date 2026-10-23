@@ -17,5 +17,25 @@ jobs:
       run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
     - name: build cmake project
       run: cmake --build build/ --target all
-    - name: execute test
-      run: ./build/tlib-tests
+    - name: execute tests
+      run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+
+    # the tests under AddressSanitizer and UndefinedBehaviorSanitizer, every report fatal :
+    # an undefined behaviour (an int overflow, a real converted out of range) is folded by
+    # the optimizer into the expected value, and only a sanitizer sees it
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: create cmake project
+      run: >
+        cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer"
+        -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,float-cast-overflow"
+    - name: build cmake project
+      run: cmake --build build/ --target all
+    - name: execute tests
+      run: ctest --test-dir build --output-on-failure
